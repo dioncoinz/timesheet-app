@@ -4,18 +4,19 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Allow the PIN page + PIN API + Next internals
+  // Allow static + api + pin page
   if (
-    pathname.startsWith("/pin") ||
-    pathname.startsWith("/api/pin") ||
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon")
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/pin")
   ) {
     return NextResponse.next();
   }
 
-  // Require cookie
+  // Simple cookie gate (set this cookie after PIN success)
   const authed = req.cookies.get("pin_ok")?.value === "1";
+
   if (!authed) {
     const url = req.nextUrl.clone();
     url.pathname = "/pin";
@@ -26,5 +27,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
