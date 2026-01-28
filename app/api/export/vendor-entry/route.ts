@@ -1,92 +1,76 @@
 ﻿import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import path from "path";
-import { Resend } from "resend";
+import fs from "fs";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-type LineIn = {
-  dateISO: string;
-  company: string;
-  employeeName: string;
-  sapId: string;
-  role: string;
-  hours: number;
-  woNumber: string;
-  opNumber: string;
-  workCenter: string;
-  poNumber: string;
-  poItem: string;
-};
-
-function toDDMMYYYY(dateISO: string): string {
-  const m = dateISO.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return "";
-  return `${m[3]}.${m[2]}.${m[1]}`;
-}
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { lines } = (await req.json()) as { lines: LineIn[] };
-    if (!lines?.length) {
+    const body = await req.json();
+    const lines = body?.lines || [];
+
+    if (!Array.isArray(lines) || lines.length === 0) {
       return NextResponse.json({ error: "No lines provided" }, { status: 400 });
     }
 
-    // Load template
-    const filePath = path.join(process.cwd(), "public", "data", "Master App Timesheet.xlsx");
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.readFile(filePath);
+    // Load your template
+    const templatePath = path.join(
+      process.cwd(),
+      "public",
+      "templates",
+      "BOOM.xlsx"
+    );
 
-    const wsNames = wb.getWorksheet("Names");
-    const wsVendor = wb.getWorksheet("Vendor Entry Sheet");
-    if (!wsNames || !wsVendor) {
-      return NextResponse.json({ error: "Missing worksheets" }, { status: 400 });
+    if (!fs.existsSync(templatePath)) {
+      return NextResponse.json(
+        { error: "Template not found", templatePath },
+        { status: 500 }
+      );
     }
 
-    // Build service master lookup (Names G/H)
-    const serviceMasterByRole: Record<string, string> = {};
-    wsNames.eachRow((row, i) => {
-      if (i === 1) return;
-      const role = String(row.getCell(7).value ?? "").toLowerCase().trim();
-      const sm = String(row.getCell(8).value ?? "").trim();
-      if (role && sm) serviceMasterByRole[role] = sm;
-    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(templatePath);
 
-    // Write rows
-    let r = 5;
+    const sheet = workbook.worksheets[0];
+
+    if (!sheet) {
+      return NextResponse.json({ error: "No sheet in template" }, { status: 500 });
+    }
+
+    // Example: write starting at row 2
+    let row = 2;
+
     for (const l of lines) {
-      wsVendor.getCell(`A${r}`).value = toDDMMYYYY(l.dateISO);
-      wsVendor.getCell(`B${r}`).value = l.employeeName;
-      wsVendor.getCell(`C${r}`).value = l.sapId;
-      wsVendor.getCell(`D${r}`).value = serviceMasterByRole[l.role.toLowerCase()] ?? "";
-      wsVendor.getCell(`E${r}`).value = l.woNumber;
-      wsVendor.getCell(`F${r}`).value = l.opNumber;
-      wsVendor.getCell(`G${r}`).value = l.workCenter;
-      wsVendor.getCell(`H${r}`).value = l.hours;
-      wsVendor.getCell(`I${r}`).value = l.poNumber;
-      wsVendor.getCell(`J${r}`).value = l.poItem;
-      r++;
+      sheet.getCell(row, 1).value = l.date;
+      sheet.getCell(row, 2).value = l.employeeName;
+      sheet.getCell(row, 3).value = l.role;
+      sheet.getCell(row, 4).value = l.serviceMasterNumber;
+      sheet.getCell(row, 5).value = l.workOrderNumber;
+      sheet.getCell(row, 6).value = l.operationNumber;
+      sheet.getCell(row, 7).value = l.workCenter;
+      sheet.getCell(row, 8).value = l.hours;
+      row++;
     }
 
-    const buffer = await wb.xlsx.writeBuffer();
-    const filename = `VendorEntry_${lines[0].company}_${lines[0].dateISO}.xlsx`;
+    // 🔑 IMPORTANT: write as buffer (not JSON, not text)
+    const buffer = await workbook.xlsx.writeBuffer();
 
-    // Send email
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM!,
-      to: process.env.EMAIL_TO!,
-      subject: `Vendor Entry – ${lines[0].company} – ${lines[0].dateISO}`,
-      text: "Vendor entry sheet attached.",
-      attachments: [
-        {
-          filename,
-          content: Buffer.from(buffer),
-        },
-      ],
+    return new NextResponse(buffer, {
+      status: 200,
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="VendorEntry_Boom_${new Date()
+          .toISOString()
+          .slice(0, 10)}.xlsx"`,
+      },
     });
-
-    return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (err: any) {
+    console.error("EXPORT ERROR:", err);
+    return NextResponse.json(
+      { error: err?.message ?? "Export failed" },
+      { status: 500 }
+    );
   }
 }
