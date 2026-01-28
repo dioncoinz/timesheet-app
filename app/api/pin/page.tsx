@@ -9,17 +9,15 @@ export default function PinPage() {
 
   async function submit() {
     setMsg(null);
-    if (!pin.trim()) {
-      setMsg("Enter a PIN.");
-      return;
-    }
+    const clean = pin.trim();
+    if (!clean) return setMsg("Enter a PIN.");
 
     setLoading(true);
     try {
       const res = await fetch("/api/pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({ pin: clean }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -29,10 +27,9 @@ export default function PinPage() {
         return;
       }
 
-      // cookie set by /api/pin, now go home
       window.location.href = "/";
     } catch (e: any) {
-      setMsg(e?.message ?? "Failed to submit PIN");
+      setMsg(e?.message ?? "PIN check failed");
     } finally {
       setLoading(false);
     }
@@ -52,7 +49,7 @@ export default function PinPage() {
     >
       <div style={{ width: "100%", maxWidth: 420, border: "1px solid #333", borderRadius: 12, padding: 18 }}>
         <h1 style={{ margin: 0, fontSize: 26 }}>Enter PIN</h1>
-        <p style={{ marginTop: 8, opacity: 0.8 }}>This app is protected. Enter your PIN to continue.</p>
+        <p style={{ marginTop: 8, opacity: 0.8 }}>Enter your PIN to continue.</p>
 
         <input
           type="password"
