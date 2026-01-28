@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import path from "path";
 import fs from "fs";
@@ -6,7 +6,7 @@ import fs from "fs";
 export const runtime = "nodejs";
 
 type ExportLine = {
-  dateISO: string; // YYYY-MM-DD
+  dateISO: string;
   company: string;
 
   employeeName: string;
@@ -25,15 +25,13 @@ type ExportLine = {
 };
 
 function toDDMMYYYY(iso: string): string {
-  if (!iso) return "";
-  const [y, m, d] = String(iso).split("-");
-  if (!y || !m || !d) return String(iso);
+  const [y, m, d] = String(iso || "").split("-");
+  if (!y || !m || !d) return String(iso || "");
   return `${d}.${m}.${y}`;
 }
 
 function asText(v: any): string {
-  if (v == null) return "";
-  return String(v);
+  return v == null ? "" : String(v);
 }
 
 function asNumber(v: any): number {
@@ -54,18 +52,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No lines provided" }, { status: 400 });
     }
 
-    const templatePath = path.join(
-      process.cwd(),
-      "public",
-      "data",
-      "Master App Timesheet.xlsx"
-    );
-
+    const templatePath = path.join(process.cwd(), "public", "data", "Master App Timesheet.xlsx");
     if (!fs.existsSync(templatePath)) {
-      return NextResponse.json(
-        { error: "Template not found", templatePath },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Template not found", templatePath }, { status: 500 });
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -81,17 +70,17 @@ export async function POST(req: Request) {
 
     let row = 4;
     for (const l of lines) {
-      sheet.getCell(row, 1).value = toDDMMYYYY(asText(l.dateISO));      // A Date
-      sheet.getCell(row, 2).value = asText(l.employeeName);            // B Name
-      sheet.getCell(row, 3).value = asText(l.sapId);                   // C SAP ID
-      sheet.getCell(row, 4).value = asText(l.serviceMasterNumber);     // D Service Master
-      sheet.getCell(row, 5).value = asText(l.woNumber);                // E WO
-      sheet.getCell(row, 6).value = asText(l.opNumber);                // F OP
-      sheet.getCell(row, 7).value = asText(l.workCenter);              // G WC
-      sheet.getCell(row, 8).value = asNumber(l.hours);                 // H Hours
-      sheet.getCell(row, 9).value = asText(l.poNumber);                // I PO
-      sheet.getCell(row, 10).value = asText(l.poItem);                 // J PO Item
-      sheet.getCell(row, 11).value = asText(l.role);                   // K Role
+      sheet.getCell(row, 1).value = toDDMMYYYY(asText(l.dateISO));     // A Date
+      sheet.getCell(row, 2).value = asText(l.employeeName);           // B Name
+      sheet.getCell(row, 3).value = asText(l.sapId);                  // C SAP ID
+      sheet.getCell(row, 4).value = asText(l.serviceMasterNumber);    // D Service Master
+      sheet.getCell(row, 5).value = asText(l.woNumber);               // E WO
+      sheet.getCell(row, 6).value = asText(l.opNumber);               // F OP
+      sheet.getCell(row, 7).value = asText(l.workCenter);             // G WC
+      sheet.getCell(row, 8).value = asNumber(l.hours);                // H Hours
+      sheet.getCell(row, 9).value = asText(l.poNumber);               // I PO
+      sheet.getCell(row, 10).value = asText(l.poItem);                // J PO Item
+      sheet.getCell(row, 11).value = asText(l.role);                  // K Role
 
       [1, 2, 3, 4, 5, 6, 7, 9, 10, 11].forEach((c) => (sheet.getCell(row, c).numFmt = "@"));
       row++;
@@ -107,8 +96,7 @@ export async function POST(req: Request) {
     return new NextResponse(buffer, {
       status: 200,
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${filename}"`,
       },
     });

@@ -89,16 +89,18 @@ wsNames.eachRow((row, rowNumber) => {
     // Work orders by company (Work Orders A, B, C, E, F)
     const workOrdersByCompany: Record<
       string,
-      { woNumber: string; opNumber: string; woHeader: string; workCenter: string }[]
-    > = {};
+        { woNumber: string; opNumber: string; opShortText: string; woHeader: string; workCenter: string }[]
+> = {};
 
     wsWO.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
       const woA = toText(row.getCell(1).value);       // A
       const opB = toText(row.getCell(2).value);       // B
       const headerC = toText(row.getCell(3).value);   // C
+      const opShortD = toText(row.getCell(4).value); // D = Op Short Text
       const wcE = toText(row.getCell(5).value);       // E
       const companyF = toText(row.getCell(6).value);  // F
+      
 
       if (!companyF || !woA) return;
 
@@ -106,6 +108,7 @@ wsNames.eachRow((row, rowNumber) => {
       workOrdersByCompany[companyF].push({
         woNumber: woA,
         opNumber: opB,
+        opShortText: opShortD,
         woHeader: headerC,
         workCenter: wcE,
       });
