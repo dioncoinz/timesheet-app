@@ -18,16 +18,16 @@ export default function PinPage() {
         body: JSON.stringify({ pin }),
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        setError("Incorrect PIN");
+        setError(data?.error ?? "Incorrect PIN");
         setLoading(false);
         return;
       }
 
-      // IMPORTANT:
-      // Force a full page reload so middleware sees the cookie
       window.location.href = "/";
-    } catch (e) {
+    } catch {
       setError("Something went wrong. Try again.");
       setLoading(false);
     }
@@ -36,44 +36,80 @@ export default function PinPage() {
   return (
     <main
       style={{
-        maxWidth: 360,
-        margin: "100px auto",
-        padding: 20,
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#000",
         fontFamily: "sans-serif",
       }}
     >
-      <h1 style={{ marginBottom: 12 }}>Enter PIN</h1>
-
-      <input
-        type="password"
-        inputMode="numeric"
-        value={pin}
-        onChange={(e) => setPin(e.target.value)}
-        placeholder="PIN"
+      <div
         style={{
           width: "100%",
-          padding: 12,
-          fontSize: 18,
-          marginBottom: 12,
-        }}
-      />
-
-      <button
-        onClick={submit}
-        disabled={loading || !pin}
-        style={{
-          width: "100%",
-          padding: 12,
-          fontSize: 16,
-          cursor: loading ? "not-allowed" : "pointer",
+          maxWidth: 360,
+          padding: 24,
+          textAlign: "center",
+          background: "#111",
+          borderRadius: 12,
+          boxShadow: "0 0 30px rgba(0,0,0,.6)",
         }}
       >
-        {loading ? "Checking…" : "Continue"}
-      </button>
+        {/* LOGO */}
+        <img
+          src="/logo"
+          alt="Greatland"
+          style={{
+            maxWidth: 200,
+            marginBottom: 20,
+          }}
+        />
 
-      {error && (
-        <p style={{ color: "crimson", marginTop: 12 }}>{error}</p>
-      )}
+        <h2 style={{ color: "#fff", marginBottom: 14 }}>
+          WO Confirmation Sheet
+        </h2>
+
+        <input
+          type="password"
+          inputMode="numeric"
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+          placeholder="Enter PIN"
+          style={{
+            width: "100%",
+            padding: 14,
+            fontSize: 18,
+            marginBottom: 14,
+            borderRadius: 8,
+            border: "1px solid #444",
+            background: "#000",
+            color: "#fff",
+          }}
+        />
+
+        <button
+          onClick={submit}
+          disabled={loading || !pin}
+          style={{
+            width: "100%",
+            padding: 14,
+            fontSize: 16,
+            borderRadius: 8,
+            background: "#444",
+            color: "#fff",
+            border: "none",
+            cursor: loading ? "not-allowed" : "pointer",
+          }}
+        >
+          {loading ? "Checking…" : "Continue"}
+        </button>
+
+        {error && (
+          <p style={{ color: "crimson", marginTop: 14 }}>
+            {error}
+          </p>
+        )}
+      </div>
     </main>
   );
 }
