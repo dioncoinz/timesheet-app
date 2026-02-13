@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "exceljs": "^4.4.0",
-    "next": "16.1.4",
+    "next": "^16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "resend": "^6.8.0"
+    "resend": "^6.9.2"
   },
   "devDependencies": {
     "@types/node": "^20",

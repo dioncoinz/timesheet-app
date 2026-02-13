@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type Person = { name: string; sapId: string; role: string };
 
@@ -137,7 +137,17 @@ const styles = {
     borderRadius: 8,
     marginBottom: 12,
   } as React.CSSProperties,
+
+  // ✅ success banner
+  success: {
+    background: "#0f2a18",
+    border: "1px solid #2a7a45",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  } as React.CSSProperties,
 };
+
 type SearchOption = { value: string; label: string; disabled?: boolean };
 
 function SearchSelect(props: {
@@ -151,24 +161,22 @@ function SearchSelect(props: {
 
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const wrapRef = (globalThis as any).React?.useRef?.(null) ?? null; // fallback-safe
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  // Keep input text in sync with selected label
   useEffect(() => {
     const found = options.find((o) => o.value === value);
     setQ(found ? found.label : "");
   }, [value, options]);
 
-  // Close on outside click
   useEffect(() => {
     function onDocDown(e: MouseEvent) {
-      const el = (wrapRef as any)?.current as HTMLElement | null;
+      const el = wrapRef.current;
       if (!el) return;
       if (!el.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
-  }, [wrapRef]);
+  }, []);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -240,7 +248,7 @@ function SearchSelect(props: {
                   cursor: opt.disabled ? "not-allowed" : "pointer",
                   fontSize: 16,
                 }}
-                onMouseDown={(e) => e.preventDefault()} // prevent input blur flicker
+                onMouseDown={(e) => e.preventDefault()}
               >
                 {opt.label}
               </button>
@@ -253,6 +261,17 @@ function SearchSelect(props: {
 }
 
 export default function HomePage() {
+  const DEFAULT_EMAIL_TO = "dioncoinz@gmail.com";
+
+  const EMPTY_BLOCK: WOBlock = {
+    woNumber: "",
+    opNumber: "",
+    opShortText: "",
+    woHeader: "",
+    workCenter: "",
+    rows: [{ employeeName: "", hours: "" }],
+  };
+
   const [opts, setOpts] = useState<Options | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -262,9 +281,14 @@ export default function HomePage() {
   );
   const [company, setCompany] = useState("");
 
-  const [blocks, setBlocks] = useState<WOBlock[]>([]);
+  // ✅ Start with ONE block
+  const [blocks, setBlocks] = useState<WOBlock[]>([EMPTY_BLOCK]);
+
   const [exporting, setExporting] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
+
+  // ✅ Success banner text
+  const [uiSuccess, setUiSuccess] = useState<string | null>(null);
 
   // Responsive flag
   const [isMobile, setIsMobile] = useState(false);
@@ -312,10 +336,12 @@ export default function HomePage() {
     return map;
   }, [peopleForCompany]);
 
-  // Reset when company changes
+  // ✅ Reset when company changes (keep one empty block)
   useEffect(() => {
-    setBlocks([]);
+    setBlocks([EMPTY_BLOCK]);
     setUiError(null);
+    setUiSuccess(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [company]);
 
   // Helpers
@@ -356,6 +382,7 @@ export default function HomePage() {
   function addWorkOrderBlock() {
     if (!company) return;
     setUiError(null);
+    setUiSuccess(null);
     setBlocks((prev) => [
       ...prev,
       {
@@ -371,11 +398,13 @@ export default function HomePage() {
 
   function removeBlock(blockIndex: number) {
     setUiError(null);
+    setUiSuccess(null);
     setBlocks((prev) => prev.filter((_, i) => i !== blockIndex));
   }
 
   function addPersonRow(blockIndex: number) {
     setUiError(null);
+    setUiSuccess(null);
     setBlocks((prev) =>
       prev.map((b, i) =>
         i === blockIndex
@@ -387,6 +416,7 @@ export default function HomePage() {
 
   function removeRow(blockIndex: number, rowIndex: number) {
     setUiError(null);
+    setUiSuccess(null);
     setBlocks((prev) =>
       prev.map((b, i) => {
         if (i !== blockIndex) return b;
@@ -402,6 +432,7 @@ export default function HomePage() {
   // Auto-add row if last row becomes complete
   function updateRow(blockIndex: number, rowIndex: number, patch: Partial<Row>) {
     setUiError(null);
+    setUiSuccess(null);
     setBlocks((prev) =>
       prev.map((b, i) => {
         if (i !== blockIndex) return b;
@@ -422,6 +453,7 @@ export default function HomePage() {
 
   function onSelectWO(blockIndex: number, woKey: string) {
     setUiError(null);
+    setUiSuccess(null);
 
     if (!woKey) {
       setBlocks((prev) =>
@@ -473,7 +505,8 @@ export default function HomePage() {
 
     if (!dateISO) return (setUiError("Please select a date."), null);
     if (!company) return (setUiError("Please select a company."), null);
-    if (blocks.length === 0) return (setUiError("Add at least one work order."), null);
+    if (blocks.length === 0)
+      return (setUiError("Add at least one work order."), null);
 
     const poInfo = opts.poByCompany?.[company] ?? { poNumber: "", poItem: "" };
     const lines: ExportLine[] = [];
@@ -505,7 +538,9 @@ export default function HomePage() {
 
         const h = parseHoursStrict(r.hours);
         if (!Number.isFinite(h) || h <= 0) {
-          setUiError(`Block #${bi + 1}, row #${ri + 1}: Enter valid hours (> 0).`);
+          setUiError(
+            `Block #${bi + 1}, row #${ri + 1}: Enter valid hours (> 0).`
+          );
           return null;
         }
 
@@ -529,36 +564,34 @@ export default function HomePage() {
       }
     }
 
-    if (lines.length === 0) return (setUiError("No valid people/hours entered yet."), null);
+    if (lines.length === 0)
+      return (setUiError("No valid people/hours entered yet."), null);
+
     return lines;
   }
 
   async function sendEmail() {
     setUiError(null);
+    setUiSuccess(null);
+
     const lines = buildExportLines();
     if (!lines) return;
 
     setExporting(true);
     try {
-      const res = await fetch("/api/export/vendor-entry", {
+      const res = await fetch("/api/export/vendor-entry/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines }),
+        body: JSON.stringify({ to: DEFAULT_EMAIL_TO, lines }),
       });
 
-      if (!res.ok) {
-        let msg = `Email failed (${res.status})`;
-        try {
-          const j = await res.json();
-          if (j?.error) msg = j.error;
-        } catch {}
-        throw new Error(msg);
-      }
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error || `Email failed (${res.status})`);
 
-      const j = await res.json();
-      alert(`Email sent to ${j.emailedTo} ✅`);
+      setUiSuccess(`Email sent for processing ✅`);
+      window.setTimeout(() => setUiSuccess(null), 3000);
     } catch (e: any) {
-      setUiError(e?.message ?? "Email failed");
+      setUiError(e?.message || "Email failed");
     } finally {
       setExporting(false);
     }
@@ -566,6 +599,8 @@ export default function HomePage() {
 
   async function downloadToDevice() {
     setUiError(null);
+    setUiSuccess(null);
+
     const lines = buildExportLines();
     if (!lines) return;
 
@@ -578,18 +613,15 @@ export default function HomePage() {
       });
 
       if (!res.ok) {
-        let msg = `Download failed (${res.status})`;
-        try {
-          const j = await res.json();
-          if (j?.error) msg = j.error;
-        } catch {}
-        throw new Error(msg);
+        const text = await res.text(); // ✅ safe for binary endpoints
+        throw new Error(text || `Download failed (${res.status})`);
       }
 
       const blob = await res.blob();
       const cd = res.headers.get("content-disposition");
       const filename =
-        filenameFromContentDisposition(cd) ?? `VendorEntry_${company}_${dateISO}.xlsx`;
+        filenameFromContentDisposition(cd) ??
+        `VendorEntry_${company}_${dateISO}.xlsx`;
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -644,7 +676,11 @@ export default function HomePage() {
           await fetch("/api/logout", { method: "POST" });
           window.location.href = "/pin";
         }}
-        style={{ ...styles.buttonGhost, marginBottom: 12, width: isMobile ? "100%" : undefined }}
+        style={{
+          ...styles.buttonGhost,
+          marginBottom: 12,
+          width: isMobile ? "100%" : undefined,
+        }}
       >
         Log out
       </button>
@@ -660,6 +696,13 @@ export default function HomePage() {
       {uiError && (
         <div style={styles.warn}>
           <strong>Fix needed:</strong> {uiError}
+        </div>
+      )}
+
+      {/* ✅ Success popup/banner */}
+      {uiSuccess && (
+        <div style={styles.success}>
+          <strong>Success:</strong> {uiSuccess}
         </div>
       )}
 
@@ -708,22 +751,28 @@ export default function HomePage() {
           </div>
 
           {/* Add WO */}
-          <div style={{ marginTop: 18, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              marginTop: 18,
+              display: "flex",
+              gap: 12,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <button
               onClick={addWorkOrderBlock}
               disabled={!company}
-              style={{ ...styles.button, ...(company ? {} : styles.disabled), width: isMobile ? "100%" : undefined }}
+              style={{
+                ...styles.button,
+                ...(company ? {} : styles.disabled),
+                width: isMobile ? "100%" : undefined,
+              }}
             >
               + Add Work Order
             </button>
             {!company && <span style={{ opacity: 0.8 }}>Select a company first</span>}
           </div>
-
-          {blocks.length === 0 && (
-            <div style={{ marginTop: 14, padding: 12, border: "1px dashed #555", borderRadius: 10 }}>
-              No work orders yet. Click <strong>+ Add Work Order</strong>.
-            </div>
-          )}
 
           {/* WO Blocks */}
           {blocks.map((b, bi) => {
@@ -756,7 +805,7 @@ export default function HomePage() {
                       <option value="">Select work order…</option>
                       {workOrdersForCompany.map((w) => {
                         const key = `${w.woNumber}|${w.opNumber}|${w.workCenter}`;
-                        // Label: Header, Op Short Text, WO Number (nothing else)
+                        // Label: Header, Op Short Text, WO Number
                         const label = `${w.woHeader}, ${w.opShortText || `OP ${w.opNumber}`}, ${w.woNumber}`;
                         return (
                           <option key={key} value={key}>
@@ -768,8 +817,10 @@ export default function HomePage() {
 
                     {b.woNumber ? (
                       <div style={{ marginTop: 10, fontSize: 14, opacity: 0.85 }}>
-                        WO: <strong>{b.woNumber}</strong> &nbsp; OP: <strong>{b.opNumber}</strong>
-                        {b.opShortText ? ` — ${b.opShortText}` : ""} &nbsp; WC: <strong>{b.workCenter}</strong>
+                        WO: <strong>{b.woNumber}</strong> &nbsp; OP:{" "}
+                        <strong>{b.opNumber}</strong>
+                        {b.opShortText ? ` — ${b.opShortText}` : ""} &nbsp; WC:{" "}
+                        <strong>{b.workCenter}</strong>
                       </div>
                     ) : (
                       <div style={{ marginTop: 10, fontSize: 14, opacity: 0.75 }}>
@@ -780,7 +831,12 @@ export default function HomePage() {
 
                   <button
                     onClick={() => removeBlock(bi)}
-                    style={{ ...styles.buttonDanger, width: isMobile ? "100%" : undefined }}
+                    disabled={blocks.length === 1}
+                    style={{
+                      ...styles.buttonDanger,
+                      ...(blocks.length === 1 ? styles.disabled : {}),
+                      width: isMobile ? "100%" : undefined,
+                    }}
                   >
                     Remove
                   </button>
