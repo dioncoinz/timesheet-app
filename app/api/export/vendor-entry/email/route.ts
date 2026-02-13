@@ -51,8 +51,8 @@ sheet.getCell(row, 10).value = asText(l.poItem);
 sheet.getCell(row, 11).value = asText(l.role);
 
 ```
-[1,2,3,4,5,6,7,9,10,11].forEach(
-  c => sheet.getCell(row, c).numFmt = "@"
+[1, 2, 3, 4, 5, 6, 7, 9, 10, 11].forEach(
+  (c) => (sheet.getCell(row, c).numFmt = "@")
 );
 
 row++;
@@ -80,7 +80,6 @@ if (!to)
 if (!Array.isArray(lines) || lines.length === 0)
   return NextResponse.json({ error: "No lines provided" }, { status: 400 });
 
-// ---------- ENV CHECK ----------
 if (!process.env.RESEND_API_KEY) {
   console.error("Missing RESEND_API_KEY");
   return NextResponse.json(
@@ -89,20 +88,17 @@ if (!process.env.RESEND_API_KEY) {
   );
 }
 
-const EMAIL_FROM =
-  process.env.EMAIL_FROM || "onboarding@resend.dev";
+const EMAIL_FROM = process.env.EMAIL_FROM || "onboarding@resend.dev";
 
 console.log("EMAIL REQUEST:", {
   to,
   lines: lines.length,
   from: EMAIL_FROM,
-  env: process.env.VERCEL_ENV
+  env: process.env.VERCEL_ENV,
 });
 
-// ---------- BUILD EXCEL ----------
 const { buffer, filename } = await buildWorkbook(lines);
 
-// ---------- SEND EMAIL ----------
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const result = await resend.emails.send({
@@ -110,17 +106,11 @@ const result = await resend.emails.send({
   to,
   subject: "Vendor Entry Sheet",
   html: "<p>Attached is your export.</p>",
-  attachments: [
-    {
-      filename,
-      content: buffer.toString("base64")
-    }
-  ]
+  attachments: [{ filename, content: buffer.toString("base64") }],
 });
 
 console.log("RESEND RESULT:", result);
 
-// ---------- HANDLE RESEND ERRORS ----------
 const anyResult = result as any;
 
 if (anyResult?.error) {
@@ -133,7 +123,7 @@ if (anyResult?.error) {
 
 return NextResponse.json({
   ok: true,
-  id: anyResult?.data?.id ?? null
+  id: anyResult?.data?.id ?? null,
 });
 ```
 
