@@ -50,13 +50,11 @@ sheet.getCell(row, 9).value = asText(l.poNumber);
 sheet.getCell(row, 10).value = asText(l.poItem);
 sheet.getCell(row, 11).value = asText(l.role);
 
-```
 [1, 2, 3, 4, 5, 6, 7, 9, 10, 11].forEach(
   (c) => (sheet.getCell(row, c).numFmt = "@")
 );
 
 row++;
-```
 
 }
 
@@ -73,7 +71,6 @@ export async function POST(req: Request) {
 try {
 const { lines, to } = await req.json();
 
-```
 if (!to)
   return NextResponse.json({ error: "Missing email" }, { status: 400 });
 
@@ -125,7 +122,6 @@ return NextResponse.json({
   ok: true,
   id: anyResult?.data?.id ?? null,
 });
-```
 
 } catch (err: any) {
 console.error("EMAIL ROUTE ERROR:", err);
