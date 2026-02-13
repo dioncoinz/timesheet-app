@@ -1,82 +1,131 @@
 import { NextResponse } from "next/server";
+
 import { Resend } from "resend";
+
 import ExcelJS from "exceljs";
+
 import path from "path";
+
 import fs from "fs";
 
 export const runtime = "nodejs";
 
 function toDDMMYYYY(iso: string){
-  const [y,m,d]=String(iso||"").split("-");
-  if(!y||!m||!d) return String(iso||"");
-  return `${d}.${m}.${y}`;
+
+const [y,m,d]=String(iso||"").split("-");
+
+if(!y||!m||!d) return String(iso||"");
+
+return `${d}.${m}.${y}`;
+
 }
+
 const asText=(v:any)=>v==null?"":String(v);
+
 const asNumber=(v:any)=>Number.isFinite(Number(v))?Number(v):0;
+
 const safeFilename=(s:string)=>String(s).replace(/[^a-z0-9_\-\.]/gi,"_");
 
 async function buildWorkbook(lines:any[]){
-  const templatePath = path.join(process.cwd(),"public","data","Master App Timesheet.xlsx");
-  if(!fs.existsSync(templatePath)) throw new Error("Template not found");
 
-  const workbook=new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(templatePath);
+const templatePath = path.join(process.cwd(),"public","data","Master App Timesheet.xlsx");
 
-  const sheet=workbook.getWorksheet("Vendor Entry Sheet");
-  if(!sheet) throw new Error("Missing sheet");
+if(!fs.existsSync(templatePath)) throw new Error("Template not found");
 
-  let row=4;
-  for(const l of lines){
-    sheet.getCell(row,1).value=toDDMMYYYY(asText(l.dateISO));
-    sheet.getCell(row,2).value=asText(l.employeeName);
-    sheet.getCell(row,3).value=asText(l.sapId);
-    sheet.getCell(row,4).value=asText(l.serviceMasterNumber);
-    sheet.getCell(row,5).value=asText(l.woNumber);
-    sheet.getCell(row,6).value=asText(l.opNumber);
-    sheet.getCell(row,7).value=asText(l.workCenter);
-    sheet.getCell(row,8).value=asNumber(l.hours);
-    sheet.getCell(row,9).value=asText(l.poNumber);
-    sheet.getCell(row,10).value=asText(l.poItem);
-    sheet.getCell(row,11).value=asText(l.role);
+const workbook=new ExcelJS.Workbook();
 
-    [1,2,3,4,5,6,7,9,10,11].forEach(c=>sheet.getCell(row,c).numFmt="@");
-    row++;
-  }
+await workbook.xlsx.readFile(templatePath);
 
-  const first=lines[0];
-  const filename=`VendorEntry_${safeFilename(first?.company??"Company")}_${safeFilename(first?.dateISO??"date")}.xlsx`;
+const sheet=workbook.getWorksheet("Vendor Entry Sheet");
 
-  return {
-    filename,
-    buffer: Buffer.from(await workbook.xlsx.writeBuffer())
-  };
+if(!sheet) throw new Error("Missing sheet");
+
+let row=4;
+
+for(const l of lines){
+
+sheet.getCell(row,1).value=toDDMMYYYY(asText(l.dateISO));
+
+sheet.getCell(row,2).value=asText(l.employeeName);
+
+sheet.getCell(row,3).value=asText(l.sapId);
+
+sheet.getCell(row,4).value=asText(l.serviceMasterNumber);
+
+sheet.getCell(row,5).value=asText(l.woNumber);
+
+sheet.getCell(row,6).value=asText(l.opNumber);
+
+sheet.getCell(row,7).value=asText(l.workCenter);
+
+sheet.getCell(row,8).value=asNumber(l.hours);
+
+sheet.getCell(row,9).value=asText(l.poNumber);
+
+sheet.getCell(row,10).value=asText(l.poItem);
+
+sheet.getCell(row,11).value=asText(l.role);
+
+[1,2,3,4,5,6,7,9,10,11].forEach(c=>sheet.getCell(row,c).numFmt="@");
+
+row++;
+
+}
+
+const first=lines[0];
+
+const filename=`VendorEntry_${safeFilename(first?.company??"Company")}_${safeFilename(first?.dateISO??"date")}.xlsx`;
+
+return {
+
+filename,
+
+buffer: Buffer.from(await workbook.xlsx.writeBuffer())
+
+};
+
 }
 
 export async function POST(req:Request){
-  try{
-    const { lines, to } = await req.json();
 
-    if(!to) return NextResponse.json({error:"Missing email"}, {status:400});
-    if(!lines?.length) return NextResponse.json({error:"No lines"}, {status:400});
+try{
 
-    const { buffer, filename } = await buildWorkbook(lines);
+const { lines, to } = await req.json();
 
-    const resend = new Resend(process.env.RESEND_API_KEY);
+if(!to) return NextResponse.json({error:"Missing email"}, {status:400});
 
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM!,
-      to,
-      subject:"Vendor Entry Sheet",
-      html:"<p>Attached is your export.</p>",
-      attachments:[
-        { filename, content: buffer.toString("base64") }
-      ]
-    });
+if(!lines?.length) return NextResponse.json({error:"No lines"}, {status:400});
 
-    return NextResponse.json({ ok:true });
+const { buffer, filename } = await buildWorkbook(lines);
 
-  }catch(err:any){
-    console.error(err);
-    return NextResponse.json({error:err.message},{status:500});
-  }
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+await resend.emails.send({
+
+from: process.env.EMAIL_FROM!,
+
+to,
+
+subject:"Vendor Entry Sheet",
+
+html:"<p>Attached is your export.</p>",
+
+attachments:[
+
+{ filename, content: buffer.toString("base64") }
+
+]
+
+});
+
+return NextResponse.json({ ok:true });
+
+}catch(err:any){
+
+console.error(err);
+
+return NextResponse.json({error:err.message},{status:500});
+
+}
+
 }
