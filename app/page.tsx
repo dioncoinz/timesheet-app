@@ -33,6 +33,9 @@ type WOBlock = {
   opShortText: string;
   woHeader: string;
   workCenter: string;
+  manualEntry: boolean;
+  manualWorkOrderText: string;
+  minimized: boolean;
   rows: Row[];
 };
 
@@ -54,6 +57,8 @@ type ExportLine = {
   poNumber: string;
   poItem: string;
 };
+
+type PendingExportAction = "email" | "download" | null;
 
 const styles = {
   page: {
@@ -89,6 +94,12 @@ const styles = {
     border: "1px solid #777",
     borderRadius: 6,
     cursor: "pointer",
+  } as React.CSSProperties,
+
+  buttonSuccess: {
+    background: "#1f6b3b",
+    border: "1px solid #2c8c4d",
+    color: "#fff",
   } as React.CSSProperties,
 
   buttonGhost: {
@@ -138,14 +149,27 @@ const styles = {
     marginBottom: 12,
   } as React.CSSProperties,
 
-  // ✅ success banner
-  success: {
-    background: "#0f2a18",
-    border: "1px solid #2a7a45",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.72)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    zIndex: 1000,
   } as React.CSSProperties,
+
+  modalCard: {
+    width: "100%",
+    maxWidth: 560,
+    background: "linear-gradient(#171717, #0c0c0c)",
+    border: "1px solid #3a3a3a",
+    borderRadius: 14,
+    padding: 20,
+    boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+  } as React.CSSProperties,
+
 };
 
 type SearchOption = { value: string; label: string; disabled?: boolean };
@@ -269,6 +293,9 @@ export default function HomePage() {
     opShortText: "",
     woHeader: "",
     workCenter: "",
+    manualEntry: false,
+    manualWorkOrderText: "",
+    minimized: false,
     rows: [{ employeeName: "", hours: "" }],
   };
 
@@ -287,8 +314,10 @@ export default function HomePage() {
   const [exporting, setExporting] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
 
-  // ✅ Success banner text
-  const [uiSuccess, setUiSuccess] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
+  const emailSentTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingExportAction>(null);
+  const [pendingLines, setPendingLines] = useState<ExportLine[] | null>(null);
 
   // Responsive flag
   const [isMobile, setIsMobile] = useState(false);
@@ -297,6 +326,12 @@ export default function HomePage() {
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (emailSentTimeoutRef.current) window.clearTimeout(emailSentTimeoutRef.current);
+    };
   }, []);
 
   // Load options
@@ -340,7 +375,9 @@ export default function HomePage() {
   useEffect(() => {
     setBlocks([EMPTY_BLOCK]);
     setUiError(null);
-    setUiSuccess(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [company]);
 
@@ -360,6 +397,26 @@ export default function HomePage() {
       (sum, r) => sum + (r.employeeName ? safeHours(r.hours) : 0),
       0
     );
+  }
+
+  function blockCompletedRows(b: WOBlock): number {
+    return b.rows.filter(
+      (r) => Boolean(r.employeeName) && Number.isFinite(parseHoursStrict(r.hours)) && parseHoursStrict(r.hours) > 0
+    ).length;
+  }
+
+  function blockCanMinimize(b: WOBlock): boolean {
+    return Boolean(b.woNumber || b.manualWorkOrderText.trim()) && blockCompletedRows(b) > 0;
+  }
+
+  function summarizeHoursByPerson(lines: ExportLine[]) {
+    const totals = new Map<string, number>();
+    for (const line of lines) {
+      totals.set(line.employeeName, (totals.get(line.employeeName) ?? 0) + line.hours);
+    }
+    return Array.from(totals.entries())
+      .map(([name, hours]) => ({ name, hours }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   const grandTotal = useMemo(
@@ -382,29 +439,50 @@ export default function HomePage() {
   function addWorkOrderBlock() {
     if (!company) return;
     setUiError(null);
-    setUiSuccess(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
     setBlocks((prev) => [
       ...prev,
-      {
-        woNumber: "",
-        opNumber: "",
-        opShortText: "",
-        woHeader: "",
-        workCenter: "",
-        rows: [{ employeeName: "", hours: "" }],
-      },
-    ]);
+        {
+          woNumber: "",
+          opNumber: "",
+          opShortText: "",
+          woHeader: "",
+          workCenter: "",
+          manualEntry: false,
+          manualWorkOrderText: "",
+          minimized: false,
+          rows: [{ employeeName: "", hours: "" }],
+        },
+      ]);
   }
 
   function removeBlock(blockIndex: number) {
     setUiError(null);
-    setUiSuccess(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
     setBlocks((prev) => prev.filter((_, i) => i !== blockIndex));
+  }
+
+  function toggleBlockMinimized(blockIndex: number) {
+    setUiError(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
+    setBlocks((prev) =>
+      prev.map((b, i) =>
+        i === blockIndex ? { ...b, minimized: !b.minimized } : b
+      )
+    );
   }
 
   function addPersonRow(blockIndex: number) {
     setUiError(null);
-    setUiSuccess(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
     setBlocks((prev) =>
       prev.map((b, i) =>
         i === blockIndex
@@ -416,7 +494,9 @@ export default function HomePage() {
 
   function removeRow(blockIndex: number, rowIndex: number) {
     setUiError(null);
-    setUiSuccess(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
     setBlocks((prev) =>
       prev.map((b, i) => {
         if (i !== blockIndex) return b;
@@ -429,10 +509,11 @@ export default function HomePage() {
     );
   }
 
-  // Auto-add row if last row becomes complete
   function updateRow(blockIndex: number, rowIndex: number, patch: Partial<Row>) {
     setUiError(null);
-    setUiSuccess(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
     setBlocks((prev) =>
       prev.map((b, i) => {
         if (i !== blockIndex) return b;
@@ -441,11 +522,6 @@ export default function HomePage() {
           ri === rowIndex ? { ...r, ...patch } : r
         );
 
-        const last = rows[rows.length - 1];
-        const lastComplete =
-          Boolean(last.employeeName) && safeHours(last.hours) > 0;
-        if (lastComplete) rows.push({ employeeName: "", hours: "" });
-
         return { ...b, rows };
       })
     );
@@ -453,7 +529,9 @@ export default function HomePage() {
 
   function onSelectWO(blockIndex: number, woKey: string) {
     setUiError(null);
-    setUiSuccess(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
 
     if (!woKey) {
       setBlocks((prev) =>
@@ -466,6 +544,9 @@ export default function HomePage() {
                 opShortText: "",
                 woHeader: "",
                 workCenter: "",
+                manualEntry: false,
+                manualWorkOrderText: "",
+                minimized: false,
               }
             : b
         )
@@ -493,6 +574,51 @@ export default function HomePage() {
               opShortText: found.opShortText ?? "",
               woHeader: found.woHeader,
               workCenter: found.workCenter,
+              manualEntry: false,
+              manualWorkOrderText: "",
+              minimized: false,
+            }
+          : b
+      )
+    );
+  }
+
+  function toggleManualWO(blockIndex: number, enabled: boolean) {
+    setUiError(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
+    setBlocks((prev) =>
+      prev.map((b, i) =>
+        i === blockIndex
+          ? {
+              ...b,
+              manualEntry: enabled,
+              manualWorkOrderText: enabled ? b.manualWorkOrderText : "",
+              woNumber: enabled ? "" : b.woNumber,
+              opNumber: enabled ? "" : b.opNumber,
+              opShortText: enabled ? "" : b.opShortText,
+              woHeader: enabled ? "" : b.woHeader,
+              workCenter: enabled ? "" : b.workCenter,
+              minimized: false,
+            }
+          : b
+      )
+    );
+  }
+
+  function updateManualWO(blockIndex: number, value: string) {
+    setUiError(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
+    setBlocks((prev) =>
+      prev.map((b, i) =>
+        i === blockIndex
+          ? {
+              ...b,
+              manualWorkOrderText: value,
+              woNumber: value.trim(),
             }
           : b
       )
@@ -514,7 +640,13 @@ export default function HomePage() {
     for (let bi = 0; bi < blocks.length; bi++) {
       const b = blocks[bi];
 
-      if (!b.woNumber || !b.opNumber || !b.workCenter) {
+      const manualText = b.manualWorkOrderText.trim();
+      if (b.manualEntry) {
+        if (!manualText) {
+          setUiError(`Work order block #${bi + 1}: Enter a work order or description.`);
+          return null;
+        }
+      } else if (!b.woNumber || !b.opNumber || !b.workCenter) {
         setUiError(`Work order block #${bi + 1}: Please select a work order.`);
         return null;
       }
@@ -555,9 +687,9 @@ export default function HomePage() {
           role: p.role ?? "",
           serviceMasterNumber,
           hours: h,
-          woNumber: b.woNumber,
-          opNumber: b.opNumber,
-          workCenter: b.workCenter,
+          woNumber: b.manualEntry ? manualText : b.woNumber,
+          opNumber: b.manualEntry ? "" : b.opNumber,
+          workCenter: b.manualEntry ? "" : b.workCenter,
           poNumber: poInfo.poNumber ?? "",
           poItem: poInfo.poItem ?? "",
         });
@@ -570,12 +702,27 @@ export default function HomePage() {
     return lines;
   }
 
-  async function sendEmail() {
+  function openExportConfirmation(action: PendingExportAction) {
     setUiError(null);
-    setUiSuccess(null);
+    setEmailSent(false);
+    setPendingAction(null);
+    setPendingLines(null);
 
     const lines = buildExportLines();
     if (!lines) return;
+
+    setPendingLines(lines);
+    setPendingAction(action);
+  }
+
+  function closeExportConfirmation() {
+    setPendingAction(null);
+    setPendingLines(null);
+  }
+
+  async function sendEmail(lines: ExportLine[]) {
+    setUiError(null);
+    setEmailSent(false);
 
     setExporting(true);
     try {
@@ -588,8 +735,9 @@ export default function HomePage() {
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error || `Email failed (${res.status})`);
 
-      setUiSuccess(`Email sent for processing ✅`);
-      window.setTimeout(() => setUiSuccess(null), 3000);
+      setEmailSent(true);
+      if (emailSentTimeoutRef.current) window.clearTimeout(emailSentTimeoutRef.current);
+      emailSentTimeoutRef.current = window.setTimeout(() => setEmailSent(false), 3000);
     } catch (e: any) {
       setUiError(e?.message || "Email failed");
     } finally {
@@ -597,12 +745,9 @@ export default function HomePage() {
     }
   }
 
-  async function downloadToDevice() {
+  async function downloadToDevice(lines: ExportLine[]) {
     setUiError(null);
-    setUiSuccess(null);
-
-    const lines = buildExportLines();
-    if (!lines) return;
+    setEmailSent(false);
 
     setExporting(true);
     try {
@@ -638,7 +783,24 @@ export default function HomePage() {
     }
   }
 
+  async function confirmPendingAction() {
+    if (!pendingAction || !pendingLines) return;
+
+    const action = pendingAction;
+    const lines = pendingLines;
+    closeExportConfirmation();
+
+    if (action === "email") {
+      await sendEmail(lines);
+      return;
+    }
+
+    await downloadToDevice(lines);
+  }
+
   // Render
+  const personHourSummary = pendingLines ? summarizeHoursByPerson(pendingLines) : [];
+
   return (
     <main
       style={{
@@ -667,10 +829,6 @@ export default function HomePage() {
         </h1>
       </div>
 
-      <p style={styles.subtitle}>
-        Date → Company → Work Orders → People & hours → Export Vendor Entry
-      </p>
-
       <button
         onClick={async () => {
           await fetch("/api/logout", { method: "POST" });
@@ -696,13 +854,6 @@ export default function HomePage() {
       {uiError && (
         <div style={styles.warn}>
           <strong>Fix needed:</strong> {uiError}
-        </div>
-      )}
-
-      {/* ✅ Success popup/banner */}
-      {uiSuccess && (
-        <div style={styles.success}>
-          <strong>Success:</strong> {uiSuccess}
         </div>
       )}
 
@@ -750,36 +901,14 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Add WO */}
-          <div
-            style={{
-              marginTop: 18,
-              display: "flex",
-              gap: 12,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              onClick={addWorkOrderBlock}
-              disabled={!company}
-              style={{
-                ...styles.button,
-                ...(company ? {} : styles.disabled),
-                width: isMobile ? "100%" : undefined,
-              }}
-            >
-              + Add Work Order
-            </button>
-            {!company && <span style={{ opacity: 0.8 }}>Select a company first</span>}
-          </div>
-
           {/* WO Blocks */}
           {blocks.map((b, bi) => {
             const selectedKey =
               b.woNumber && b.opNumber && b.workCenter
                 ? `${b.woNumber}|${b.opNumber}|${b.workCenter}`
                 : "";
+            const completedRows = blockCompletedRows(b);
+            const canMinimize = blockCanMinimize(b);
 
             return (
               <div key={bi} style={styles.card}>
@@ -794,143 +923,232 @@ export default function HomePage() {
                 >
                   <div style={{ flex: 1, width: "100%" }}>
                     <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                      Work Order (filtered by company)
+                      Work Order {bi + 1}
                     </div>
 
-                    <select
-                      value={selectedKey}
-                      onChange={(e) => onSelectWO(bi, e.target.value)}
-                      style={styles.input}
-                    >
-                      <option value="">Select work order…</option>
-                      {workOrdersForCompany.map((w) => {
-                        const key = `${w.woNumber}|${w.opNumber}|${w.workCenter}`;
-                        // Label: Header, Op Short Text, WO Number
-                        const label = `${w.woHeader}, ${w.opShortText || `OP ${w.opNumber}`}, ${w.woNumber}`;
-                        return (
-                          <option key={key} value={key}>
-                            {label}
-                          </option>
-                        );
-                      })}
-                    </select>
-
-                    {b.woNumber ? (
-                      <div style={{ marginTop: 10, fontSize: 14, opacity: 0.85 }}>
-                        WO: <strong>{b.woNumber}</strong> &nbsp; OP:{" "}
-                        <strong>{b.opNumber}</strong>
-                        {b.opShortText ? ` — ${b.opShortText}` : ""} &nbsp; WC:{" "}
-                        <strong>{b.workCenter}</strong>
+                    {b.minimized ? (
+                      <div style={{ fontSize: 14, opacity: 0.9, lineHeight: 1.6 }}>
+                        <strong>{b.manualEntry ? "Manual work order entry" : b.woHeader || "Work order selected"}</strong>
+                        <div>
+                          WO: <strong>{b.manualEntry ? b.manualWorkOrderText || "—" : b.woNumber || "—"}</strong>
+                          {!b.manualEntry && (
+                            <>
+                              &nbsp; OP: <strong>{b.opNumber || "—"}</strong>
+                              {b.opShortText ? ` — ${b.opShortText}` : ""} &nbsp; WC: <strong>{b.workCenter || "—"}</strong>
+                            </>
+                          )}
+                        </div>
+                        <div>
+                          People: <strong>{completedRows}</strong> &nbsp; Hours: <strong>{blockTotal(b).toFixed(2)}</strong>
+                        </div>
                       </div>
                     ) : (
-                      <div style={{ marginTop: 10, fontSize: 14, opacity: 0.75 }}>
-                        Select a work order to enable people rows.
-                      </div>
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 12,
+                            flexWrap: "wrap",
+                            marginBottom: 10,
+                            fontSize: 14,
+                          }}
+                        >
+                          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <input
+                              type="radio"
+                              name={`wo-mode-${bi}`}
+                              checked={!b.manualEntry}
+                              onChange={() => toggleManualWO(bi, false)}
+                            />
+                            Select from list
+                          </label>
+                          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <input
+                              type="radio"
+                              name={`wo-mode-${bi}`}
+                              checked={b.manualEntry}
+                              onChange={() => toggleManualWO(bi, true)}
+                            />
+                            Enter manually
+                          </label>
+                        </div>
+
+                        {b.manualEntry ? (
+                          <>
+                            <input
+                              type="text"
+                              value={b.manualWorkOrderText}
+                              onChange={(e) => updateManualWO(bi, e.target.value)}
+                              placeholder="Enter WO number or description"
+                              style={styles.input}
+                            />
+                            <div style={{ marginTop: 10, fontSize: 14, opacity: 0.75 }}>
+                              Manual entries will be included in the export so they can be tidied up after submission.
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <select
+                              value={selectedKey}
+                              onChange={(e) => onSelectWO(bi, e.target.value)}
+                              style={styles.input}
+                            >
+                              <option value="">Select work order…</option>
+                              {workOrdersForCompany.map((w) => {
+                                const key = `${w.woNumber}|${w.opNumber}|${w.workCenter}`;
+                                const label = `${w.woHeader}, ${w.opShortText || `OP ${w.opNumber}`}, ${w.woNumber}`;
+                                return (
+                                  <option key={key} value={key}>
+                                    {label}
+                                  </option>
+                                );
+                              })}
+                            </select>
+
+                            {b.woNumber ? (
+                              <div style={{ marginTop: 10, fontSize: 14, opacity: 0.85 }}>
+                                WO: <strong>{b.woNumber}</strong> &nbsp; OP:{" "}
+                                <strong>{b.opNumber}</strong>
+                                {b.opShortText ? ` — ${b.opShortText}` : ""} &nbsp; WC:{" "}
+                                <strong>{b.workCenter}</strong>
+                              </div>
+                            ) : (
+                              <div style={{ marginTop: 10, fontSize: 14, opacity: 0.75 }}>
+                                Select a work order to enable people rows.
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
                     )}
                   </div>
 
-                  <button
-                    onClick={() => removeBlock(bi)}
-                    disabled={blocks.length === 1}
+                  <div
                     style={{
-                      ...styles.buttonDanger,
-                      ...(blocks.length === 1 ? styles.disabled : {}),
+                      display: "flex",
+                      gap: 10,
                       width: isMobile ? "100%" : undefined,
+                      flexWrap: "wrap",
                     }}
                   >
-                    Remove
-                  </button>
-                </div>
+                    <button
+                      onClick={() => toggleBlockMinimized(bi)}
+                      disabled={!canMinimize}
+                      style={{
+                        ...styles.buttonGhost,
+                        ...(canMinimize ? {} : styles.disabled),
+                        width: isMobile ? "100%" : undefined,
+                      }}
+                    >
+                      {b.minimized ? "Expand" : "Minimise"}
+                    </button>
 
-                {/* People header */}
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginTop: 14,
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ fontWeight: 700 }}>People</div>
-                  <div style={{ fontSize: 14, opacity: 0.85 }}>
-                    WO total: <strong>{blockTotal(b).toFixed(2)}</strong> hrs
+                    <button
+                      onClick={() => removeBlock(bi)}
+                      disabled={blocks.length === 1}
+                      style={{
+                        ...styles.buttonDanger,
+                        ...(blocks.length === 1 ? styles.disabled : {}),
+                        width: isMobile ? "100%" : undefined,
+                      }}
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
 
-                {/* People rows */}
-                {b.rows.map((r, ri) => {
-                  // prevent duplicates in this WO block (exclude current row)
-                  const used = new Set(
-                    b.rows.map((x, idx) => (idx === ri ? "" : x.employeeName)).filter(Boolean)
-                  );
-
-                  return (
+                {!b.minimized && (
+                  <>
+                    {/* People header */}
                     <div
-                      key={ri}
                       style={{
-                        display: "grid",
-                        gridTemplateColumns: isMobile ? "1fr" : "1fr 160px 90px",
-                        gap: 12,
-                        marginTop: 12,
+                        display: "flex",
+                        justifyContent: "space-between",
                         alignItems: "center",
+                        marginTop: 14,
+                        gap: 10,
+                        flexWrap: "wrap",
                       }}
                     >
-                      <select
-                        value={r.employeeName}
-                        onChange={(e) => updateRow(bi, ri, { employeeName: e.target.value })}
-                        style={styles.input}
-                        disabled={!b.woNumber}
-                      >
-                        <option value="">Select person…</option>
-                        {peopleForCompany.map((p) => {
-                          const isUsed = used.has(p.name);
-                          return (
-                            <option key={p.name} value={p.name} disabled={isUsed}>
-                              {p.name} ({p.role}){isUsed ? " — already added" : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.25"
-                        placeholder="Hours"
-                        value={r.hours}
-                        onChange={(e) => updateRow(bi, ri, { hours: e.target.value })}
-                        style={styles.input}
-                        disabled={!b.woNumber}
-                      />
-
-                      <button
-                        onClick={() => removeRow(bi, ri)}
-                        disabled={!b.woNumber}
-                        style={{
-                          ...styles.buttonDanger,
-                          width: isMobile ? "100%" : undefined,
-                        }}
-                      >
-                        X
-                      </button>
+                      <div style={{ fontWeight: 700 }}>People</div>
+                      <div style={{ fontSize: 14, opacity: 0.85 }}>
+                        WO total: <strong>{blockTotal(b).toFixed(2)}</strong> hrs
+                      </div>
                     </div>
-                  );
-                })}
 
-                <button
-                  onClick={() => addPersonRow(bi)}
-                  disabled={!b.woNumber}
-                  style={{
-                    ...styles.buttonGhost,
-                    ...(b.woNumber ? {} : styles.disabled),
-                    marginTop: 12,
-                    width: isMobile ? "100%" : undefined,
-                  }}
-                >
-                  + Add Another Person
-                </button>
+                    {/* People rows */}
+                    {b.rows.map((r, ri) => {
+                      const used = new Set(
+                        b.rows.map((x, idx) => (idx === ri ? "" : x.employeeName)).filter(Boolean)
+                      );
+
+                      return (
+                        <div
+                          key={ri}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: isMobile ? "1fr" : "1fr 160px 90px",
+                            gap: 12,
+                            marginTop: 12,
+                            alignItems: "center",
+                          }}
+                        >
+                          <select
+                            value={r.employeeName}
+                            onChange={(e) => updateRow(bi, ri, { employeeName: e.target.value })}
+                            style={styles.input}
+                            disabled={!b.woNumber && !b.manualWorkOrderText.trim()}
+                          >
+                            <option value="">Select person…</option>
+                            {peopleForCompany.map((p) => {
+                              const isUsed = used.has(p.name);
+                              return (
+                                <option key={p.name} value={p.name} disabled={isUsed}>
+                                  {p.name} ({p.role}){isUsed ? " — already added" : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.25"
+                            placeholder="Hours"
+                            value={r.hours}
+                            onChange={(e) => updateRow(bi, ri, { hours: e.target.value })}
+                            style={styles.input}
+                            disabled={!b.woNumber && !b.manualWorkOrderText.trim()}
+                          />
+
+                          <button
+                            onClick={() => removeRow(bi, ri)}
+                            disabled={!b.woNumber && !b.manualWorkOrderText.trim()}
+                            style={{
+                              ...styles.buttonDanger,
+                              width: isMobile ? "100%" : undefined,
+                            }}
+                          >
+                            X
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    <button
+                      onClick={() => addPersonRow(bi)}
+                      disabled={!b.woNumber && !b.manualWorkOrderText.trim()}
+                      style={{
+                        ...styles.buttonGhost,
+                        ...(b.woNumber || b.manualWorkOrderText.trim() ? {} : styles.disabled),
+                        marginTop: 12,
+                        width: isMobile ? "100%" : undefined,
+                      }}
+                    >
+                      + Add Another Person
+                    </button>
+                  </>
+                )}
               </div>
             );
           })}
@@ -944,36 +1162,172 @@ export default function HomePage() {
             style={{
               marginTop: 14,
               display: "flex",
-              justifyContent: "flex-end",
+              justifyContent: "space-between",
+              alignItems: isMobile ? "stretch" : "flex-end",
               gap: 12,
               flexWrap: "wrap",
             }}
           >
-            <button
-              onClick={sendEmail}
-              disabled={exporting || !company || blocks.length === 0}
+            <div
               style={{
-                ...styles.button,
-                ...(exporting ? styles.disabled : {}),
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
                 width: isMobile ? "100%" : undefined,
               }}
             >
-              {exporting ? "Working…" : "Send Email"}
-            </button>
+              <button
+                onClick={addWorkOrderBlock}
+                disabled={!company}
+                style={{
+                  ...styles.button,
+                  ...(company ? {} : styles.disabled),
+                  width: isMobile ? "100%" : undefined,
+                }}
+              >
+                + Add Work Order
+              </button>
+              {!company && <span style={{ opacity: 0.8 }}>Select a company first</span>}
+            </div>
 
-            <button
-              onClick={downloadToDevice}
-              disabled={exporting || !company || blocks.length === 0}
+            <div
               style={{
-                ...styles.button,
-                ...(exporting ? styles.disabled : {}),
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 12,
+                flexWrap: "wrap",
                 width: isMobile ? "100%" : undefined,
               }}
             >
-              {exporting ? "Working…" : "Download"}
-            </button>
+              <button
+                onClick={() => openExportConfirmation("email")}
+                disabled={exporting || !company || blocks.length === 0}
+                style={{
+                  ...styles.button,
+                  ...(emailSent ? styles.buttonSuccess : {}),
+                  ...(exporting ? styles.disabled : {}),
+                  width: isMobile ? "100%" : undefined,
+                }}
+              >
+                {exporting ? "Working…" : emailSent ? "✓ Email Sent" : "Send Email"}
+              </button>
+
+              <button
+                onClick={() => openExportConfirmation("download")}
+                disabled={exporting || !company || blocks.length === 0}
+                style={{
+                  ...styles.button,
+                  ...(exporting ? styles.disabled : {}),
+                  width: isMobile ? "100%" : undefined,
+                }}
+              >
+                {exporting ? "Working…" : "Download"}
+              </button>
+            </div>
           </div>
         </>
+      )}
+
+      {pendingAction && pendingLines && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
+            <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
+              {pendingAction === "email" ? "Confirm Email" : "Confirm Download"}
+            </div>
+
+            <div style={{ opacity: 0.85, marginBottom: 16, lineHeight: 1.5 }}>
+              Review the total hours by person before you {pendingAction === "email" ? "send the email" : "download the file"}.
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: 10,
+                fontSize: 14,
+                marginBottom: 10,
+                opacity: 0.85,
+              }}
+            >
+              <div>Total rows: <strong>{pendingLines.length}</strong></div>
+              <div>Total hours: <strong>{pendingLines.reduce((sum, line) => sum + line.hours, 0).toFixed(2)}</strong></div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #3a3a3a",
+                borderRadius: 10,
+                overflow: "hidden",
+                marginBottom: 18,
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 110px",
+                  gap: 12,
+                  padding: "12px 14px",
+                  background: "#1d1d1d",
+                  fontWeight: 700,
+                }}
+              >
+                <div>Person</div>
+                <div style={{ textAlign: "right" }}>Hours</div>
+              </div>
+
+              <div style={{ maxHeight: 280, overflowY: "auto" }}>
+                {personHourSummary.map((item) => (
+                  <div
+                    key={item.name}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 110px",
+                      gap: 12,
+                      padding: "12px 14px",
+                      borderTop: "1px solid #2a2a2a",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>{item.name}</div>
+                    <div style={{ textAlign: "right" }}>{item.hours.toFixed(2)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                onClick={closeExportConfirmation}
+                style={{
+                  ...styles.buttonGhost,
+                  width: isMobile ? "100%" : undefined,
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmPendingAction}
+                style={{
+                  ...styles.button,
+                  width: isMobile ? "100%" : undefined,
+                }}
+              >
+                {pendingAction === "email" ? "Confirm Send Email" : "Confirm Download"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
