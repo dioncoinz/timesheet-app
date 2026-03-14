@@ -969,7 +969,7 @@ export default function HomePage() {
                               checked={b.manualEntry}
                               onChange={() => toggleManualWO(bi, true)}
                             />
-                            Enter manually
+                            Enter manually (only if not found in list)
                           </label>
                         </div>
 
