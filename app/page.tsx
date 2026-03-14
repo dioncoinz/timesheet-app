@@ -315,7 +315,7 @@ export default function HomePage() {
   const [uiError, setUiError] = useState<string | null>(null);
 
   const [emailSent, setEmailSent] = useState(false);
-  const emailSentTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const emailSentTimeoutRef = useRef<number | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingExportAction>(null);
   const [pendingLines, setPendingLines] = useState<ExportLine[] | null>(null);
 
