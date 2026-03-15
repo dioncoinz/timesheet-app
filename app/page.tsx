@@ -829,19 +829,39 @@ export default function HomePage() {
         </h1>
       </div>
 
-      <button
-        onClick={async () => {
-          await fetch("/api/logout", { method: "POST" });
-          window.location.href = "/pin";
-        }}
+      <div
         style={{
-          ...styles.buttonGhost,
+          display: "flex",
+          gap: 12,
           marginBottom: 12,
-          width: isMobile ? "100%" : undefined,
+          flexWrap: "wrap",
         }}
       >
-        Log out
-      </button>
+        <button
+          onClick={() => {
+            window.location.href = "/admin";
+          }}
+          style={{
+            ...styles.buttonGhost,
+            width: isMobile ? "100%" : undefined,
+          }}
+        >
+          Admin Dashboard
+        </button>
+
+        <button
+          onClick={async () => {
+            await fetch("/api/logout", { method: "POST" });
+            window.location.href = "/pin";
+          }}
+          style={{
+            ...styles.buttonGhost,
+            width: isMobile ? "100%" : undefined,
+          }}
+        >
+          Log out
+        </button>
+      </div>
 
       {loading && <p>Loading options…</p>}
 

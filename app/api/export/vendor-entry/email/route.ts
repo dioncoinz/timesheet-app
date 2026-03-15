@@ -4,6 +4,8 @@ import ExcelJS from "exceljs";
 import path from "path";
 import fs from "fs";
 
+import { appendSubmissionRecord } from "@/lib/submissions";
+
 export const runtime = "nodejs";
 
 type ExportLine = {
@@ -176,9 +178,18 @@ export async function POST(req: Request) {
       );
     }
 
+    await appendSubmissionRecord({
+      company: asText(lines[0]?.company),
+      dateISO: asText(lines[0]?.dateISO),
+      emailTo: normalizedTo,
+      lineCount: lines.length,
+      totalHours: lines.reduce((sum, line) => sum + asNumber(line.hours), 0),
+    });
+
     return NextResponse.json({
       ok: true,
       id: result.data?.id ?? null,
+      filename,
     });
   } catch (err: unknown) {
     const errorMessage = explainEmailError(err);

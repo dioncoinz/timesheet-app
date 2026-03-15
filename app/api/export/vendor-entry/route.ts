@@ -4,6 +4,8 @@ import path from "path";
 import fs from "fs";
 import { Resend } from "resend";
 
+import { appendSubmissionRecord } from "@/lib/submissions";
+
 export const runtime = "nodejs";
 
 type ExportLine = {
@@ -170,6 +172,14 @@ export async function POST(req: Request) {
           content: built.buffer.toString("base64"),
         },
       ],
+    });
+
+    await appendSubmissionRecord({
+      company: lines[0]?.company ?? "",
+      dateISO: lines[0]?.dateISO ?? "",
+      emailTo: to,
+      lineCount: lines.length,
+      totalHours: lines.reduce((sum, line) => sum + asNumber(line.hours), 0),
     });
 
     return NextResponse.json({ ok: true, filename: built.filename });
