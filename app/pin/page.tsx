@@ -55,15 +55,16 @@ export default function PinPage() {
           boxShadow: "0 0 30px rgba(0,0,0,.6)",
         }}
       >
-        {/* LOGO */}
-        <img
-          src="/logo"
-          alt="Greatland"
+        <div
           style={{
-            maxWidth: 200,
+            color: "#fff",
+            fontSize: 24,
+            fontWeight: 700,
             marginBottom: 20,
           }}
-        />
+        >
+          Timesheetz - built by Valeron
+        </div>
 
         <h2 style={{ color: "#fff", marginBottom: 14 }}>
           WO Confirmation Sheet
