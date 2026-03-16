@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
+import os from "os";
 import path from "path";
 
 export type SubmissionRecord = {
@@ -11,11 +12,13 @@ export type SubmissionRecord = {
   emailTo: string;
 };
 
-const submissionsFilePath = path.join(
-  process.cwd(),
-  "data",
-  "submissions.json"
-);
+const submissionsFilePath = (() => {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return path.join(os.tmpdir(), "timesheet-app", "submissions.json");
+  }
+
+  return path.join(process.cwd(), "data", "submissions.json");
+})();
 
 async function ensureDataDirectory() {
   await mkdir(path.dirname(submissionsFilePath), { recursive: true });

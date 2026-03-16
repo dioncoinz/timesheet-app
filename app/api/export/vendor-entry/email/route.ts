@@ -178,13 +178,17 @@ export async function POST(req: Request) {
       );
     }
 
-    await appendSubmissionRecord({
-      company: asText(lines[0]?.company),
-      dateISO: asText(lines[0]?.dateISO),
-      emailTo: normalizedTo,
-      lineCount: lines.length,
-      totalHours: lines.reduce((sum, line) => sum + asNumber(line.hours), 0),
-    });
+    try {
+      await appendSubmissionRecord({
+        company: asText(lines[0]?.company),
+        dateISO: asText(lines[0]?.dateISO),
+        emailTo: normalizedTo,
+        lineCount: lines.length,
+        totalHours: lines.reduce((sum, line) => sum + asNumber(line.hours), 0),
+      });
+    } catch (loggingError) {
+      console.error("SUBMISSION LOG ERROR:", loggingError);
+    }
 
     return NextResponse.json({
       ok: true,
