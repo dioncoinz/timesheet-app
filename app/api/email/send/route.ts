@@ -1,10 +1,16 @@
 // app/api/email/send/route.ts
 import { NextResponse } from "next/server";
 
+type EmailBody = {
+  to?: string;
+  subject?: string;
+  message?: string;
+};
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { to, subject, message } = body;
+    const body = (await req.json()) as EmailBody;
+    const { to } = body;
 
     if (!to) {
       return NextResponse.json({ ok: false, error: "Missing 'to' email" }, { status: 400 });
@@ -13,9 +19,11 @@ export async function POST(req: Request) {
     // TODO: send email here (Resend / Nodemailer / etc)
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err.message : "Unknown error";
+
     return NextResponse.json(
-      { ok: false, error: err?.message ?? "Unknown error" },
+      { ok: false, error },
       { status: 500 }
     );
   }

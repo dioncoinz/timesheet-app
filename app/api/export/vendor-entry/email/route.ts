@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import ExcelJS from "exceljs";
-import path from "path";
-import fs from "fs";
 
+import { resolveShutdownWorkbook } from "@/lib/options";
 import { appendSubmissionRecord } from "@/lib/submissions";
 
 export const runtime = "nodejs";
@@ -24,6 +23,7 @@ type ExportLine = {
 };
 
 type EmailBody = {
+  shutdown?: string;
   lines?: ExportLine[];
   to?: string;
 };
@@ -71,17 +71,8 @@ function explainEmailError(err: unknown) {
   return message;
 }
 
-async function buildWorkbook(lines: ExportLine[]) {
-  const templatePath = path.join(
-    process.cwd(),
-    "public",
-    "data",
-    "Master App Timesheet.xlsx"
-  );
-
-  if (!fs.existsSync(templatePath)) {
-    throw new Error(`Template not found at ${templatePath}`);
-  }
+async function buildWorkbook(lines: ExportLine[], shutdown?: string) {
+  const { filePath: templatePath } = await resolveShutdownWorkbook(shutdown);
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(templatePath);
@@ -119,7 +110,7 @@ async function buildWorkbook(lines: ExportLine[]) {
 
 export async function POST(req: Request) {
   try {
-    const { lines, to } = (await req.json()) as EmailBody;
+    const { lines, to, shutdown } = (await req.json()) as EmailBody;
     const normalizedTo = normalizeEmail(to);
 
     if (!normalizedTo) {
@@ -150,7 +141,7 @@ export async function POST(req: Request) {
       resendKeyPreview: maskSecret(resendKey),
     });
 
-    const { buffer, filename } = await buildWorkbook(lines);
+    const { buffer, filename } = await buildWorkbook(lines, shutdown);
     console.log("EMAIL PAYLOAD:", {
       filename,
       attachmentBytes: buffer.length,

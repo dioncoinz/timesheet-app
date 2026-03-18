@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import path from "path";
-import fs from "fs";
+
+import { resolveShutdownWorkbook } from "@/lib/options";
 
 export const runtime = "nodejs";
 
@@ -20,15 +20,20 @@ type ExportLine = {
   poItem: string;
 };
 
+type DownloadBody = {
+  shutdown?: string;
+  lines: ExportLine[];
+};
+
 function toDDMMYYYY(iso: string): string {
   const [y, m, d] = String(iso || "").split("-");
   if (!y || !m || !d) return String(iso || "");
   return `${d}.${m}.${y}`;
 }
-function asText(v: any): string {
+function asText(v: unknown): string {
   return v == null ? "" : String(v);
 }
-function asNumber(v: any): number {
+function asNumber(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
@@ -36,16 +41,8 @@ function safeFilename(s: string): string {
   return String(s).replace(/[^a-z0-9_\-\.]/gi, "_");
 }
 
-async function buildWorkbook(lines: ExportLine[]) {
-  const templatePath = path.join(
-    process.cwd(),
-    "public",
-    "data",
-    "Master App Timesheet.xlsx"
-  );
-
-  if (!fs.existsSync(templatePath))
-    throw new Error("Template not found");
+async function buildWorkbook(lines: ExportLine[], shutdown?: string) {
+  const { filePath: templatePath } = await resolveShutdownWorkbook(shutdown);
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(templatePath);
@@ -82,12 +79,12 @@ async function buildWorkbook(lines: ExportLine[]) {
 
 export async function POST(req: Request) {
   try {
-    const { lines } = await req.json();
+    const { lines, shutdown } = (await req.json()) as DownloadBody;
 
     if (!Array.isArray(lines) || !lines.length)
       return NextResponse.json({ error: "No lines provided" }, { status: 400 });
 
-    const { buffer, filename } = await buildWorkbook(lines);
+    const { buffer, filename } = await buildWorkbook(lines, shutdown);
 
     return new NextResponse(buffer, {
       headers: {
@@ -97,10 +94,12 @@ export async function POST(req: Request) {
       },
     });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(err);
+    const error = err instanceof Error ? err.message : "Export failed";
+
     return NextResponse.json(
-      { error: err?.message || "Export failed" },
+      { error },
       { status: 500 }
     );
   }

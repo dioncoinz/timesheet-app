@@ -1,15 +1,14 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import path from "path";
-import fs from "fs";
 import { Resend } from "resend";
 
+import { resolveShutdownWorkbook } from "@/lib/options";
 import { appendSubmissionRecord } from "@/lib/submissions";
 
 export const runtime = "nodejs";
 
 type ExportLine = {
-  dateISO: string; // YYYY-MM-DD
+  dateISO: string;
   company: string;
 
   employeeName: string;
@@ -29,7 +28,8 @@ type ExportLine = {
 
 type Body = {
   mode: "download" | "email";
-  to?: string; // required for email
+  to?: string;
+  shutdown?: string;
   lines: ExportLine[];
 };
 
@@ -40,12 +40,12 @@ function toDDMMYYYY(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-function asText(v: any): string {
+function asText(v: unknown): string {
   if (v == null) return "";
   return String(v);
 }
 
-function asNumber(v: any): number {
+function asNumber(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
@@ -54,17 +54,8 @@ function safeFilename(s: string): string {
   return String(s).replace(/[^a-z0-9_\-\.]/gi, "_");
 }
 
-async function buildVendorEntryXlsx(lines: ExportLine[]) {
-  const templatePath = path.join(
-    process.cwd(),
-    "public",
-    "data",
-    "Master App Timesheet.xlsx"
-  );
-
-  if (!fs.existsSync(templatePath)) {
-    return { ok: false as const, error: "Template not found", templatePath };
-  }
+async function buildVendorEntryXlsx(lines: ExportLine[], shutdown?: string) {
+  const { filePath: templatePath } = await resolveShutdownWorkbook(shutdown);
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(templatePath);
@@ -102,7 +93,6 @@ async function buildVendorEntryXlsx(lines: ExportLine[]) {
     first?.dateISO ?? "date"
   )}.xlsx`;
 
-  // Ensure Node Buffer for emailing
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
 
   return { ok: true as const, buffer, filename };
@@ -126,12 +116,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "No lines provided" }, { status: 400 });
     }
 
-    const built = await buildVendorEntryXlsx(lines);
+    const built = await buildVendorEntryXlsx(lines, body?.shutdown);
     if (!built.ok) {
-      return NextResponse.json({ ok: false, error: built.error, templatePath: (built as any).templatePath }, { status: 500 });
+      return NextResponse.json({ ok: false, error: built.error }, { status: 500 });
     }
 
-    // MODE: DOWNLOAD (binary)
     if (mode === "download") {
       return new NextResponse(built.buffer, {
         status: 200,
@@ -143,7 +132,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // MODE: EMAIL (JSON response)
     const to = body?.to;
     if (!to) {
       return NextResponse.json({ ok: false, error: "Missing 'to' email" }, { status: 400 });
@@ -183,10 +171,12 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ ok: true, filename: built.filename });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("VENDOR ENTRY EXPORT ERROR:", err);
+    const error = err instanceof Error ? err.message : "Vendor entry export failed";
+
     return NextResponse.json(
-      { ok: false, error: err?.message ?? "Vendor entry export failed" },
+      { ok: false, error },
       { status: 500 }
     );
   }

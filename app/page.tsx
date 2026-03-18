@@ -12,7 +12,14 @@ type WorkOrder = {
   workCenter: string;
 };
 
+type ShutdownOption = {
+  id: string;
+  label: string;
+};
+
 type Options = {
+  shutdowns: ShutdownOption[];
+  selectedShutdown: string;
   ok: boolean;
   source: string;
   companies: string[];
@@ -172,118 +179,6 @@ const styles = {
 
 };
 
-type SearchOption = { value: string; label: string; disabled?: boolean };
-
-function SearchSelect(props: {
-  value: string;
-  options: SearchOption[];
-  placeholder?: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  const { value, options, placeholder, disabled, onChange } = props;
-
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const found = options.find((o) => o.value === value);
-    setQ(found ? found.label : "");
-  }, [value, options]);
-
-  useEffect(() => {
-    function onDocDown(e: MouseEvent) {
-      const el = wrapRef.current;
-      if (!el) return;
-      if (!el.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDocDown);
-    return () => document.removeEventListener("mousedown", onDocDown);
-  }, []);
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(needle));
-  }, [q, options]);
-
-  return (
-    <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
-      <input
-        value={q}
-        disabled={disabled}
-        placeholder={placeholder ?? "Search…"}
-        onChange={(e) => {
-          setQ(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setOpen(false);
-        }}
-        style={{
-          width: "100%",
-          padding: "14px 16px",
-          fontSize: 18,
-          background: "#2e2e2e",
-          color: "#fff",
-          border: "1px solid #555",
-          borderRadius: 6,
-          outline: "none",
-        }}
-      />
-
-      {open && !disabled && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 50,
-            top: "calc(100% + 6px)",
-            left: 0,
-            right: 0,
-            background: "#141414",
-            border: "1px solid #444",
-            borderRadius: 10,
-            maxHeight: 320,
-            overflowY: "auto",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.55)",
-          }}
-        >
-          {filtered.length === 0 ? (
-            <div style={{ padding: 12, opacity: 0.8 }}>No results</div>
-          ) : (
-            filtered.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                disabled={!!opt.disabled}
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "12px 14px",
-                  background: "transparent",
-                  color: opt.disabled ? "#777" : "#fff",
-                  border: "none",
-                  cursor: opt.disabled ? "not-allowed" : "pointer",
-                  fontSize: 16,
-                }}
-                onMouseDown={(e) => e.preventDefault()}
-              >
-                {opt.label}
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function HomePage() {
   const DEFAULT_EMAIL_TO = "dioncoinz@gmail.com";
 
@@ -306,6 +201,7 @@ export default function HomePage() {
   const [dateISO, setDateISO] = useState<string>(() =>
     new Date().toISOString().slice(0, 10)
   );
+  const [shutdown, setShutdown] = useState("");
   const [company, setCompany] = useState("");
 
   // ✅ Start with ONE block
@@ -334,25 +230,33 @@ export default function HomePage() {
     };
   }, []);
 
-  // Load options
+  async function loadOptions(shutdownId?: string) {
+    try {
+      setLoading(true);
+      setErr(null);
+
+      const params = shutdownId
+        ? `?shutdown=${encodeURIComponent(shutdownId)}`
+        : "";
+      const res = await fetch(`/api/options${params}`);
+      const data = await res.json();
+      if (!res.ok || data?.ok === false)
+        throw new Error(data?.error ?? "Failed to load options");
+
+      setOpts(data);
+      setShutdown(data.selectedShutdown ?? "");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed to load options");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        setErr(null);
-        const res = await fetch("/api/options");
-        const data = await res.json();
-        if (!res.ok || data?.ok === false)
-          throw new Error(data?.error ?? "Failed to load options");
-        setOpts(data);
-      } catch (e: any) {
-        setErr(e?.message ?? "Failed to load options");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    void loadOptions();
   }, []);
 
+  const shutdownOptions = useMemo(() => opts?.shutdowns ?? [], [opts]);
   const companies = useMemo(() => opts?.companies ?? [], [opts]);
 
   const workOrdersForCompany = useMemo(() => {
@@ -729,7 +633,7 @@ export default function HomePage() {
       const res = await fetch("/api/export/vendor-entry/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: DEFAULT_EMAIL_TO, lines }),
+        body: JSON.stringify({ to: DEFAULT_EMAIL_TO, shutdown, lines }),
       });
 
       const j = await res.json().catch(() => null);
@@ -738,8 +642,8 @@ export default function HomePage() {
       setEmailSent(true);
       if (emailSentTimeoutRef.current) window.clearTimeout(emailSentTimeoutRef.current);
       emailSentTimeoutRef.current = window.setTimeout(() => setEmailSent(false), 3000);
-    } catch (e: any) {
-      setUiError(e?.message || "Email failed");
+    } catch (e: unknown) {
+      setUiError(e instanceof Error ? e.message : "Email failed");
     } finally {
       setExporting(false);
     }
@@ -754,7 +658,7 @@ export default function HomePage() {
       const res = await fetch("/api/export/vendor-entry/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines }),
+        body: JSON.stringify({ shutdown, lines }),
       });
 
       if (!res.ok) {
@@ -776,8 +680,8 @@ export default function HomePage() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch (e: any) {
-      setUiError(e?.message ?? "Download failed");
+    } catch (e: unknown) {
+      setUiError(e instanceof Error ? e.message : "Download failed");
     } finally {
       setExporting(false);
     }
@@ -879,11 +783,11 @@ export default function HomePage() {
 
       {!loading && opts && (
         <>
-          {/* Date + Company */}
+                    {/* Date + Company */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
               gap: 14,
             }}
           >
@@ -895,6 +799,26 @@ export default function HomePage() {
                 onChange={(e) => setDateISO(e.target.value)}
                 style={styles.input}
               />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 6 }}>Shutdown</label>
+              <select
+                value={shutdown}
+                onChange={async (e) => {
+                  const value = e.target.value;
+                  setShutdown(value);
+                  setCompany("");
+                  await loadOptions(value);
+                }}
+                style={styles.input}
+              >
+                {shutdownOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -1352,3 +1276,4 @@ export default function HomePage() {
     </main>
   );
 }
+

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { hasPinSession } from "@/lib/auth";
-import { readCompaniesFromWorkbook } from "@/lib/options";
+import { readCompaniesFromAllWorkbooks } from "@/lib/options";
 import {
   readSubmissionRecords,
   type SubmissionRecord,
@@ -81,7 +81,7 @@ export default async function AdminPage() {
 
   const [records, companies] = await Promise.all([
     readSubmissionRecords(),
-    readCompaniesFromWorkbook(),
+    readCompaniesFromAllWorkbooks(),
   ]);
   const groups = groupSubmissions(records, companies);
 
@@ -327,3 +327,4 @@ export default async function AdminPage() {
     </main>
   );
 }
+
