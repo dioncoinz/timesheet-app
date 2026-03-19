@@ -55,7 +55,11 @@ async function collectWorkbookIds(dirPath: string, prefix = ""): Promise<string[
       continue;
     }
 
-    if (entry.isFile() && path.extname(entry.name).toLowerCase() === ".xlsx") {
+    if (
+      entry.isFile() &&
+      path.extname(entry.name).toLowerCase() === ".xlsx" &&
+      !entry.name.startsWith("~$")
+    ) {
       workbookIds.push(nextPrefix);
     }
   }
@@ -211,6 +215,8 @@ export async function readCompaniesFromAllWorkbooks(): Promise<string[]> {
 
   return Array.from(companies).sort((left, right) => left.localeCompare(right));
 }
+
+
 
 
 
