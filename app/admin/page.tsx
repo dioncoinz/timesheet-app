@@ -16,6 +16,15 @@ type SubmissionGroup = {
   outstandingCompanies: string[];
 };
 
+function getSubmittedDateISO(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  return parsed.toLocaleDateString("en-CA", {
+    timeZone: "Australia/Perth",
+  });
+}
+
 function formatDate(dateISO: string) {
   const parsed = new Date(`${dateISO}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return dateISO;
@@ -48,14 +57,16 @@ function groupSubmissions(
   const groups = new Map<string, SubmissionRecord[]>();
 
   for (const record of records) {
-    const existing = groups.get(record.dateISO) ?? [];
+    const submittedDateISO = getSubmittedDateISO(record.submittedAt) || record.dateISO;
+    const existing = groups.get(submittedDateISO) ?? [];
     existing.push(record);
-    groups.set(record.dateISO, existing);
+    groups.set(submittedDateISO, existing);
   }
 
   return Array.from(groups.entries())
     .sort(([left], [right]) => right.localeCompare(left))
     .map(([dateISO, submissions]) => {
+      submissions.sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
       const submittedCompanies = Array.from(
         new Set(submissions.map((item) => item.company))
       ).sort((left, right) => left.localeCompare(right));
@@ -308,6 +319,10 @@ export default async function AdminPage() {
                     <div>
                       <div style={{ opacity: 0.72, fontSize: 13 }}>Submitted</div>
                       <div>{formatDateTime(submission.submittedAt)}</div>
+                    </div>
+                    <div>
+                      <div style={{ opacity: 0.72, fontSize: 13 }}>Timesheet date</div>
+                      <div>{submission.dateISO || "-"}</div>
                     </div>
                     <div>
                       <div style={{ opacity: 0.72, fontSize: 13 }}>Rows</div>
