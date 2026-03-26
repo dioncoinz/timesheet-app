@@ -180,8 +180,6 @@ const styles = {
 };
 
 export default function HomePage() {
-  const DEFAULT_EMAIL_TO = "dioncoinz@gmail.com";
-
   const EMPTY_BLOCK: WOBlock = {
     woNumber: "",
     opNumber: "",
@@ -633,7 +631,7 @@ export default function HomePage() {
       const res = await fetch("/api/export/vendor-entry/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: DEFAULT_EMAIL_TO, shutdown, lines }),
+        body: JSON.stringify({ shutdown, lines }),
       });
 
       const j = await res.json().catch(() => null);

@@ -111,10 +111,13 @@ async function buildWorkbook(lines: ExportLine[], shutdown?: string) {
 export async function POST(req: Request) {
   try {
     const { lines, to, shutdown } = (await req.json()) as EmailBody;
-    const normalizedTo = normalizeEmail(to);
+    const normalizedTo = normalizeEmail(to) || normalizeEmail(process.env.EMAIL_TO);
 
     if (!normalizedTo) {
-      return NextResponse.json({ error: "Missing email" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing email. Set EMAIL_TO on the server or provide a recipient." },
+        { status: 400 }
+      );
     }
 
     if (!Array.isArray(lines) || lines.length === 0) {
