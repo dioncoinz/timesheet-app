@@ -1,4 +1,3 @@
-import { readdir } from "fs/promises";
 import path from "path";
 import ExcelJS from "exceljs";
 
@@ -25,9 +24,8 @@ export type WorkbookOptionsData = {
   workOrdersByCompany: Record<string, WorkOrder[]>;
 };
 
-const PUBLIC_DIR = path.join(process.cwd(), "public");
-const PUBLIC_DATA_DIR = path.join(PUBLIC_DIR, "data");
-const DEFAULT_WORKBOOK_ID = "data/Master App Timesheet.xlsx";
+const DEFAULT_WORKBOOK_ID = "Master App Timesheet.xlsx";
+const DEFAULT_WORKBOOK_PATH = path.join(process.cwd(), DEFAULT_WORKBOOK_ID);
 
 function toText(value: unknown): string {
   if (value == null) return "";
@@ -42,40 +40,11 @@ function formatWorkbookLabel(workbookId: string): string {
   return parsed.name.replace(/[_-]+/g, " ").trim();
 }
 
-async function collectWorkbookIds(dirPath: string, prefix = ""): Promise<string[]> {
-  const entries = await readdir(dirPath, { withFileTypes: true });
-  const workbookIds: string[] = [];
-
-  for (const entry of entries) {
-    const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
-    const fullPath = path.join(dirPath, entry.name);
-
-    if (entry.isDirectory()) {
-      workbookIds.push(...(await collectWorkbookIds(fullPath, nextPrefix)));
-      continue;
-    }
-
-    if (
-      entry.isFile() &&
-      path.extname(entry.name).toLowerCase() === ".xlsx" &&
-      !entry.name.startsWith("~$")
-    ) {
-      workbookIds.push(nextPrefix);
-    }
-  }
-
-  return workbookIds;
-}
-
 export async function listShutdownWorkbooks(): Promise<ShutdownOption[]> {
-  const workbookIds = await collectWorkbookIds(PUBLIC_DATA_DIR, "data");
-
-  return workbookIds
-    .sort((left, right) => left.localeCompare(right))
-    .map((id) => ({
-      id,
-      label: formatWorkbookLabel(id),
-    }));
+  return [{
+    id: DEFAULT_WORKBOOK_ID,
+    label: formatWorkbookLabel(DEFAULT_WORKBOOK_ID),
+  }];
 }
 
 export async function resolveShutdownWorkbook(shutdownId?: string) {
@@ -99,7 +68,7 @@ export async function resolveShutdownWorkbook(shutdownId?: string) {
   return {
     shutdowns,
     selectedShutdown: selected,
-    filePath: path.join(PUBLIC_DIR, ...selected.id.split("/")),
+    filePath: DEFAULT_WORKBOOK_PATH,
   };
 }
 
@@ -203,17 +172,7 @@ export async function readCompaniesFromWorkbook(shutdownId?: string): Promise<st
 }
 
 export async function readCompaniesFromAllWorkbooks(): Promise<string[]> {
-  const shutdowns = await listShutdownWorkbooks();
-  const companies = new Set<string>();
-
-  for (const shutdown of shutdowns) {
-    const nextCompanies = await readCompaniesFromWorkbook(shutdown.id);
-    for (const company of nextCompanies) {
-      companies.add(company);
-    }
-  }
-
-  return Array.from(companies).sort((left, right) => left.localeCompare(right));
+  return readCompaniesFromWorkbook();
 }
 
 

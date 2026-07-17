@@ -1,9 +1,8 @@
-import path from "path";
-import { fileURLToPath } from "url";
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // config options here (leave empty for now)
+  outputFileTracingIncludes: {
+    "/*": ["./Master App Timesheet.xlsx"],
+  },
 };
 
 export default nextConfig;

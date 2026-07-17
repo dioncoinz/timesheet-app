@@ -12,14 +12,7 @@ type WorkOrder = {
   workCenter: string;
 };
 
-type ShutdownOption = {
-  id: string;
-  label: string;
-};
-
 type Options = {
-  shutdowns: ShutdownOption[];
-  selectedShutdown: string;
   ok: boolean;
   source: string;
   companies: string[];
@@ -199,7 +192,6 @@ export default function HomePage() {
   const [dateISO, setDateISO] = useState<string>(() =>
     new Date().toISOString().slice(0, 10)
   );
-  const [shutdown, setShutdown] = useState("");
   const [company, setCompany] = useState("");
 
   // ✅ Start with ONE block
@@ -228,21 +220,17 @@ export default function HomePage() {
     };
   }, []);
 
-  async function loadOptions(shutdownId?: string) {
+  async function loadOptions() {
     try {
       setLoading(true);
       setErr(null);
 
-      const params = shutdownId
-        ? `?shutdown=${encodeURIComponent(shutdownId)}`
-        : "";
-      const res = await fetch(`/api/options${params}`);
+      const res = await fetch("/api/options");
       const data = await res.json();
       if (!res.ok || data?.ok === false)
         throw new Error(data?.error ?? "Failed to load options");
 
       setOpts(data);
-      setShutdown(data.selectedShutdown ?? "");
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Failed to load options");
     } finally {
@@ -254,7 +242,6 @@ export default function HomePage() {
     void loadOptions();
   }, []);
 
-  const shutdownOptions = useMemo(() => opts?.shutdowns ?? [], [opts]);
   const companies = useMemo(() => opts?.companies ?? [], [opts]);
 
   const workOrdersForCompany = useMemo(() => {
@@ -631,7 +618,7 @@ export default function HomePage() {
       const res = await fetch("/api/export/vendor-entry/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shutdown, lines }),
+        body: JSON.stringify({ lines }),
       });
 
       const j = await res.json().catch(() => null);
@@ -656,7 +643,7 @@ export default function HomePage() {
       const res = await fetch("/api/export/vendor-entry/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shutdown, lines }),
+        body: JSON.stringify({ lines }),
       });
 
       if (!res.ok) {
@@ -785,7 +772,7 @@ export default function HomePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
               gap: 14,
             }}
           >
@@ -797,26 +784,6 @@ export default function HomePage() {
                 onChange={(e) => setDateISO(e.target.value)}
                 style={styles.input}
               />
-            </div>
-
-            <div>
-              <label style={{ display: "block", marginBottom: 6 }}>Shutdown</label>
-              <select
-                value={shutdown}
-                onChange={async (e) => {
-                  const value = e.target.value;
-                  setShutdown(value);
-                  setCompany("");
-                  await loadOptions(value);
-                }}
-                style={styles.input}
-              >
-                {shutdownOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
             </div>
 
             <div>
