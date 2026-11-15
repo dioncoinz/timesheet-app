@@ -7,7 +7,6 @@ export type WorkOrder = {
   woNumber: string;
   opNumber: string;
   opShortText: string;
-  woHeader: string;
   workCenter: string;
 };
 
@@ -145,20 +144,18 @@ export async function readWorkbookOptions(
 
     const woA = toText(row.getCell(1).value);
     const opB = toText(row.getCell(2).value);
-    const headerC = toText(row.getCell(3).value);
-    const opShortD = toText(row.getCell(4).value);
-    const wcE = toText(row.getCell(5).value);
-    const companyF = toText(row.getCell(6).value);
+    const opShortC = toText(row.getCell(3).value);
+    const wcD = toText(row.getCell(4).value);
+    const companyE = toText(row.getCell(5).value);
 
-    if (!companyF || !woA) return;
+    if (!companyE || !woA) return;
 
-    if (!workOrdersByCompany[companyF]) workOrdersByCompany[companyF] = [];
-    workOrdersByCompany[companyF].push({
+    if (!workOrdersByCompany[companyE]) workOrdersByCompany[companyE] = [];
+    workOrdersByCompany[companyE].push({
       woNumber: woA,
       opNumber: opB,
-      opShortText: opShortD,
-      woHeader: headerC,
-      workCenter: wcE,
+      opShortText: opShortC,
+      workCenter: wcD,
     });
   });
 

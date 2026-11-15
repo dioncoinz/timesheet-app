@@ -8,7 +8,6 @@ type WorkOrder = {
   woNumber: string;
   opNumber: string;
   opShortText: string;
-  woHeader: string;
   workCenter: string;
 };
 
@@ -31,7 +30,6 @@ type WOBlock = {
   woNumber: string;
   opNumber: string;
   opShortText: string;
-  woHeader: string;
   workCenter: string;
   manualEntry: boolean;
   manualWorkOrderText: string;
@@ -177,7 +175,6 @@ export default function HomePage() {
     woNumber: "",
     opNumber: "",
     opShortText: "",
-    woHeader: "",
     workCenter: "",
     manualEntry: false,
     manualWorkOrderText: "",
@@ -337,7 +334,6 @@ export default function HomePage() {
           woNumber: "",
           opNumber: "",
           opShortText: "",
-          woHeader: "",
           workCenter: "",
           manualEntry: false,
           manualWorkOrderText: "",
@@ -431,7 +427,6 @@ export default function HomePage() {
                 woNumber: "",
                 opNumber: "",
                 opShortText: "",
-                woHeader: "",
                 workCenter: "",
                 manualEntry: false,
                 manualWorkOrderText: "",
@@ -461,7 +456,6 @@ export default function HomePage() {
               woNumber: found.woNumber,
               opNumber: found.opNumber,
               opShortText: found.opShortText ?? "",
-              woHeader: found.woHeader,
               workCenter: found.workCenter,
               manualEntry: false,
               manualWorkOrderText: "",
@@ -487,7 +481,6 @@ export default function HomePage() {
               woNumber: enabled ? "" : b.woNumber,
               opNumber: enabled ? "" : b.opNumber,
               opShortText: enabled ? "" : b.opShortText,
-              woHeader: enabled ? "" : b.woHeader,
               workCenter: enabled ? "" : b.workCenter,
               minimized: false,
             }
@@ -837,13 +830,13 @@ export default function HomePage() {
 
                     {b.minimized ? (
                       <div style={{ fontSize: 14, opacity: 0.9, lineHeight: 1.6 }}>
-                        <strong>{b.manualEntry ? "Manual work order entry" : b.woHeader || "Work order selected"}</strong>
+                        <strong>{b.manualEntry ? "Manual work order entry" : b.opShortText || "Work order selected"}</strong>
                         <div>
                           WO: <strong>{b.manualEntry ? b.manualWorkOrderText || "—" : b.woNumber || "—"}</strong>
                           {!b.manualEntry && (
                             <>
                               &nbsp; OP: <strong>{b.opNumber || "—"}</strong>
-                              {b.opShortText ? ` — ${b.opShortText}` : ""} &nbsp; WC: <strong>{b.workCenter || "—"}</strong>
+                              &nbsp; WC: <strong>{b.workCenter || "—"}</strong>
                             </>
                           )}
                         </div>
@@ -905,7 +898,7 @@ export default function HomePage() {
                               <option value="">Select work order…</option>
                               {workOrdersForCompany.map((w) => {
                                 const key = `${w.woNumber}|${w.opNumber}|${w.workCenter}`;
-                                const label = `${w.woHeader}, ${w.opShortText || `OP ${w.opNumber}`}, ${w.woNumber}`;
+                                const label = w.opShortText || `OP ${w.opNumber}`;
                                 return (
                                   <option key={key} value={key}>
                                     {label}
