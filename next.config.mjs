@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   outputFileTracingIncludes: {
-    "/*": ["./Master App Timesheet.xlsx"],
+    "/*": ["./public/data/November 2026 Shutdown.xlsx"],
   },
 };
 

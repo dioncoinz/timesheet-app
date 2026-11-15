@@ -24,8 +24,13 @@ export type WorkbookOptionsData = {
   workOrdersByCompany: Record<string, WorkOrder[]>;
 };
 
-const DEFAULT_WORKBOOK_ID = "Master App Timesheet.xlsx";
-const DEFAULT_WORKBOOK_PATH = path.join(process.cwd(), DEFAULT_WORKBOOK_ID);
+const DEFAULT_WORKBOOK_ID = "November 2026 Shutdown.xlsx";
+const DEFAULT_WORKBOOK_PATH = path.join(
+  process.cwd(),
+  "public",
+  "data",
+  DEFAULT_WORKBOOK_ID
+);
 
 function toText(value: unknown): string {
   if (value == null) return "";
