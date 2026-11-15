@@ -534,7 +534,9 @@ export default function HomePage() {
           setUiError(`Work order block #${bi + 1}: Enter a work order or description.`);
           return null;
         }
-      } else if (!b.woNumber || !b.opNumber || !b.workCenter) {
+      } else if (
+        !workOrdersForCompany.some((workOrder) => workOrderKey(workOrder) === workOrderKey(b))
+      ) {
         setUiError(`Work order block #${bi + 1}: Please select a work order.`);
         return null;
       }
