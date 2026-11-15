@@ -2,7 +2,12 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-type Person = { name: string; sapId: string; role: string };
+type Person = {
+  name: string;
+  sapId: string;
+  role: string;
+  serviceMasterNumber: string;
+};
 
 type WorkOrder = {
   woNumber: string;
@@ -11,12 +16,20 @@ type WorkOrder = {
   workCenter: string;
 };
 
+function workOrderKey(workOrder: WorkOrder): string {
+  return JSON.stringify([
+    workOrder.woNumber,
+    workOrder.opNumber,
+    workOrder.opShortText,
+    workOrder.workCenter,
+  ]);
+}
+
 type Options = {
   ok: boolean;
   source: string;
   companies: string[];
   peopleByCompany: Record<string, Person[]>;
-  serviceMasterByRole: Record<string, string>;
   poByCompany: Record<string, { poNumber: string; poItem: string }>;
   workOrdersByCompany: Record<string, WorkOrder[]>;
 };
@@ -438,14 +451,7 @@ export default function HomePage() {
       return;
     }
 
-    const [woNumber, opNumber, workCenter] = woKey.split("|");
-
-    const found = workOrdersForCompany.find(
-      (w) =>
-        w.woNumber === woNumber &&
-        w.opNumber === opNumber &&
-        w.workCenter === workCenter
-    );
+    const found = workOrdersForCompany.find((w) => workOrderKey(w) === woKey);
     if (!found) return;
 
     setBlocks((prev) =>
@@ -558,16 +564,13 @@ export default function HomePage() {
           return null;
         }
 
-        const roleLower = (p.role ?? "").toLowerCase();
-        const serviceMasterNumber = opts.serviceMasterByRole?.[roleLower] ?? "";
-
         lines.push({
           dateISO,
           company,
           employeeName: p.name,
           sapId: p.sapId ?? "",
           role: p.role ?? "",
-          serviceMasterNumber,
+          serviceMasterNumber: p.serviceMasterNumber ?? "",
           hours: h,
           woNumber: b.manualEntry ? manualText : b.woNumber,
           opNumber: b.manualEntry ? "" : b.opNumber,
@@ -805,10 +808,7 @@ export default function HomePage() {
 
           {/* WO Blocks */}
           {blocks.map((b, bi) => {
-            const selectedKey =
-              b.woNumber && b.opNumber && b.workCenter
-                ? `${b.woNumber}|${b.opNumber}|${b.workCenter}`
-                : "";
+            const selectedKey = b.woNumber ? workOrderKey(b) : "";
             const completedRows = blockCompletedRows(b);
             const canMinimize = blockCanMinimize(b);
 
@@ -897,7 +897,7 @@ export default function HomePage() {
                             >
                               <option value="">Select work order…</option>
                               {workOrdersForCompany.map((w) => {
-                                const key = `${w.woNumber}|${w.opNumber}|${w.workCenter}`;
+                                const key = workOrderKey(w);
                                 const label = w.opShortText || `OP ${w.opNumber}`;
                                 return (
                                   <option key={key} value={key}>

@@ -1,7 +1,12 @@
 import path from "path";
 import ExcelJS from "exceljs";
 
-export type Person = { name: string; sapId: string; role: string };
+export type Person = {
+  name: string;
+  sapId: string;
+  role: string;
+  serviceMasterNumber: string;
+};
 
 export type WorkOrder = {
   woNumber: string;
@@ -18,7 +23,6 @@ export type ShutdownOption = {
 export type WorkbookOptionsData = {
   companies: string[];
   peopleByCompany: Record<string, Person[]>;
-  serviceMasterByRole: Record<string, string>;
   poByCompany: Record<string, { poNumber: string; poItem: string }>;
   workOrdersByCompany: Record<string, WorkOrder[]>;
 };
@@ -37,6 +41,10 @@ function toText(value: unknown): string {
     return String((value as { text?: unknown }).text ?? "").trim();
   }
   return String(value).trim();
+}
+
+function companyKey(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function formatWorkbookLabel(workbookId: string): string {
@@ -100,27 +108,40 @@ export async function readWorkbookOptions(
   const companies = Array.from(companiesSet).sort((left, right) =>
     left.localeCompare(right)
   );
+  const companyNames = new Map(companies.map((name) => [companyKey(name), name]));
+
+  function resolveCompanyLabel(label: string): string {
+    const key = companyKey(label);
+    const exactMatch = companyNames.get(key);
+    if (exactMatch) return exactMatch;
+
+    // SMS crew disciplines share the SMS Group people and purchase order.
+    if (/^sms(?:$|[\s/-])/.test(key)) {
+      return companyNames.get("sms group") ?? label;
+    }
+
+    return label;
+  }
 
   const peopleByCompany: Record<string, Person[]> = {};
   wsNames.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
-    const companyA = toText(row.getCell(1).value);
+    const companyLabel = toText(row.getCell(1).value);
+    const companyA = resolveCompanyLabel(companyLabel);
     const nameB = toText(row.getCell(2).value);
     const sapIdC = toText(row.getCell(3).value);
     const roleD = toText(row.getCell(4).value);
+    const serviceMasterE = toText(row.getCell(5).value);
 
     if (!companyA || !nameB) return;
 
     if (!peopleByCompany[companyA]) peopleByCompany[companyA] = [];
-    peopleByCompany[companyA].push({ name: nameB, sapId: sapIdC, role: roleD });
-  });
-
-  const serviceMasterByRole: Record<string, string> = {};
-  wsNames.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const roleG = toText(row.getCell(7).value);
-    const smH = toText(row.getCell(8).value);
-    if (roleG && smH) serviceMasterByRole[roleG.toLowerCase()] = smH;
+    peopleByCompany[companyA].push({
+      name: nameB,
+      sapId: sapIdC,
+      role: roleD,
+      serviceMasterNumber: serviceMasterE,
+    });
   });
 
   const poByCompany: Record<string, { poNumber: string; poItem: string }> = {};
@@ -139,6 +160,7 @@ export async function readWorkbookOptions(
   });
 
   const workOrdersByCompany: Record<string, WorkOrder[]> = {};
+  const seenWorkOrders = new Map<string, Set<string>>();
   wsWO.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
 
@@ -150,19 +172,27 @@ export async function readWorkbookOptions(
 
     if (!companyE || !woA) return;
 
-    if (!workOrdersByCompany[companyE]) workOrdersByCompany[companyE] = [];
-    workOrdersByCompany[companyE].push({
-      woNumber: woA,
-      opNumber: opB,
-      opShortText: opShortC,
-      workCenter: wcD,
-    });
+    for (const label of companyE.split(",").map((value) => value.trim()).filter(Boolean)) {
+      const company = resolveCompanyLabel(label);
+      const workOrderKey = JSON.stringify([woA, opB, opShortC, wcD]);
+      const seen = seenWorkOrders.get(company) ?? new Set<string>();
+      if (seen.has(workOrderKey)) continue;
+      seen.add(workOrderKey);
+      seenWorkOrders.set(company, seen);
+
+      if (!workOrdersByCompany[company]) workOrdersByCompany[company] = [];
+      workOrdersByCompany[company].push({
+        woNumber: woA,
+        opNumber: opB,
+        opShortText: opShortC,
+        workCenter: wcD,
+      });
+    }
   });
 
   return {
     companies,
     peopleByCompany,
-    serviceMasterByRole,
     poByCompany,
     workOrdersByCompany,
   };
