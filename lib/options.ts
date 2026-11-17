@@ -115,6 +115,11 @@ export async function readWorkbookOptions(
     const exactMatch = companyNames.get(key);
     if (exactMatch) return exactMatch;
 
+    // The employee roster uses "Boltprep"; the company/PO list uses "Bolt prep".
+    if (key === "boltprep") {
+      return companyNames.get("bolt prep") ?? label;
+    }
+
     // SMS crew disciplines share the SMS Group people and purchase order.
     if (/^sms(?:$|[\s/-])/.test(key)) {
       return companyNames.get("sms group") ?? label;
